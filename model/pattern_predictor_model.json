@@ -1,0 +1,272 @@
+{
+  "cluster_models": {
+    "6": {
+      "avg_pattern": [
+        295.6666666666667,
+        292.3333333333333,
+        295.3333333333333,
+        300.3333333333333,
+        308.0,
+        306.6666666666667,
+        310.3333333333333,
+        306.6666666666667,
+        310.0,
+        311.3333333333333
+      ],
+      "std_pattern": [
+        176.10665960024215,
+        179.67068641143317,
+        178.46817332199288,
+        179.06485479351392,
+        181.9688618051634,
+        189.42779333796,
+        193.98338989603093,
+        201.29138635873673,
+        209.32908700576388,
+        213.08892249220483
+      ],
+      "pattern_length": 10
+    },
+    "23": {
+      "avg_pattern": [
+        227.5,
+        220.5,
+        222.5,
+        228.0,
+        238.0,
+        235.0,
+        241.5,
+        235.0,
+        238.0,
+        237.5
+      ],
+      "std_pattern": [
+        180.5,
+        181.5,
+        178.5,
+        180.0,
+        187.0,
+        196.0,
+        205.5,
+        213.0,
+        224.0,
+        227.5
+      ],
+      "pattern_length": 10
+    }
+  },
+  "patterns_info": {
+    "0": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "3": 1,
+        "2": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "1": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "4": 1,
+        "1": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "2": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "3": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "3": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "4": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "4": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "3": 1,
+        "2": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "5": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "4": 1,
+        "1": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "6": {
+      "signal_density": 0.3333333333333333,
+      "signal_counts": {
+        "3": 2,
+        "4": 1
+      },
+      "long_pairs": 1,
+      "short_pairs": 0
+    },
+    "7": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "1": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "8": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "2": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "9": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "3": 1,
+        "2": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "10": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "4": 1,
+        "1": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "11": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "3": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "12": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "4": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "13": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "3": 2
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "14": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "4": 2
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "15": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "1": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "16": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "2": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "17": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "3": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "18": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "4": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "19": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "3": 2,
+        "1": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "20": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "4": 2,
+        "2": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "21": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "3": 1,
+        "2": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "22": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "4": 1,
+        "1": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    },
+    "23": {
+      "signal_density": 0.5,
+      "signal_counts": {
+        "3": 1,
+        "4": 1
+      },
+      "long_pairs": 1,
+      "short_pairs": 0
+    },
+    "24": {
+      "signal_density": 0.0,
+      "signal_counts": {
+        "1": 1
+      },
+      "long_pairs": 0,
+      "short_pairs": 0
+    }
+  }
+}

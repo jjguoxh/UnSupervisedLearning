@@ -1,0 +1,3 @@
+expected_return,risk,sharpe_ratio,n_samples,signal_counts,signal_strength,total_signals,total_samples
+0.007264516671738888,0.0015022602724898964,4.835724411255605,10.0,,,,
+,,,,{},0.0,0.0,10.0
