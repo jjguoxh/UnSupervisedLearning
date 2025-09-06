@@ -108,9 +108,9 @@ class ProfitablePatternDetector:
         price_change = (future_price - current_price) / current_price
         
         # 根据信号类型调整收益率符号
-        # 做多开仓(3)和做空平仓(2)希望价格上涨
-        # 做空开仓(1)和做多平仓(4)希望价格下跌
-        if signal_label in [3, 2]:
+        # 做多开仓(1)和做空平仓(4)希望价格上涨
+        # 做空开仓(3)和做多平仓(2)希望价格下跌
+        if signal_label in [1, 4]:
             return price_change, hold_period
         else:
             return -price_change, hold_period

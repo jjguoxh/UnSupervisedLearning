@@ -209,7 +209,7 @@ class PatternLearner:
                 label_seq = labels[idx]
                 # 只考虑序列最后一个点的信号
                 last_label = label_seq[-1]
-                if last_label != 0:  # 非无操作信号
+                if last_label != 0:  # 非无操作或持仓信号
                     all_signals.append(last_label)
         
         signal_counts = Counter(all_signals)

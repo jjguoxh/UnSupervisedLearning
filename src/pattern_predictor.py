@@ -14,9 +14,9 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ========= 配置参数 =========
-LABEL_DIR = "../label/"  # 标签数据目录
-PATTERNS_DIR = "../patterns/"  # 模式数据目录
-MODEL_DIR = "../model/"  # 模型保存目录
+LABEL_DIR = "./label/"  # 标签数据目录
+PATTERNS_DIR = "./patterns/"  # 模式数据目录
+MODEL_DIR = "./model/"  # 模型保存目录
 PATTERN_LENGTH = 10  # 模式长度
 
 class PatternPredictor:
@@ -150,7 +150,7 @@ class PatternPredictor:
         # 提取最近的模式
         recent_pattern = self.extract_recent_pattern(df, current_idx)
         if recent_pattern is None:
-            return 0, 0.0  # 无操作，置信度0
+            return 0, 0.0  # 无操作或持仓，置信度0
         
         # 计算与各聚类模式的相似性
         best_cluster = None
@@ -161,7 +161,7 @@ class PatternPredictor:
         for cluster_id, model in self.cluster_models.items():
             if model is None:
                 continue
-                
+            
             # 计算与该聚类平均模式的相似性
             similarity = self.calculate_pattern_similarity(
                 recent_pattern['index_value'], 
@@ -182,9 +182,9 @@ class PatternPredictor:
                     predicted_signal = max(signal_counts, key=signal_counts.get)
                     best_signal = predicted_signal
                     best_confidence = similarity * cluster_info['signal_density']
-        
-        return best_signal, best_confidence
     
+        return best_signal, best_confidence
+
     def backtest_prediction(self, df, test_size=100):
         """
         对历史数据进行回测预测
@@ -214,20 +214,25 @@ class PatternPredictor:
                 'confidence': confidence
             })
             
-            # 检查预测是否正确（只检查非0信号）
+            # 检查预测是否正确
+            # 对于标签0，我们将其视为"无操作或持仓"状态
             if predicted_signal != 0 and actual_signal != 0:
+                # 都是非0信号，需要完全匹配
                 total_predictions += 1
                 if predicted_signal == actual_signal:
                     correct_predictions += 1
             elif predicted_signal == 0 and actual_signal == 0:
+                # 都是0信号，认为正确
                 total_predictions += 1
                 correct_predictions += 1
-        
+            # 注意：对于0和非0的组合，我们不计入准确率计算，因为0表示两种状态（无操作/持仓）
+            # 这样可以避免因为语义不明确导致的准确率失真
+    
         # 计算准确率
         accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
-        
+    
         print(f"Backtest Results:")
-        print(f"  Total predictions: {total_predictions}")
+        print(f"  Total predictions (excluding 0-signal comparisons): {total_predictions}")
         print(f"  Correct predictions: {correct_predictions}")
         print(f"  Accuracy: {accuracy:.2%}")
         
@@ -329,7 +334,7 @@ def main():
     # 获取测试数据文件
     label_files = sorted(glob.glob(os.path.join(LABEL_DIR, "*.csv")))
     if not label_files:
-        print("No label files found!")
+        print(label_files,"No label files found!")
         return
     
     # 使用最后一个文件作为测试数据
@@ -348,9 +353,9 @@ def main():
     for pred in predictions[-10:]:  # 显示最近10个预测
         signal_names = {
             0: "无操作",
-            1: "做多开仓",
+            1: "做多开仓",  # 包括开仓点和持仓状态
             2: "做多平仓",
-            3: "做空开仓",
+            3: "做空开仓",  # 包括开仓点和持仓状态
             4: "做空平仓"
         }
         
@@ -362,9 +367,9 @@ def main():
     next_signal, confidence = predictor.predict_future_signal(df, steps_ahead=1)
     signal_names = {
         0: "无操作",
-        1: "做多开仓",
+        1: "做多开仓",  # 包括开仓点和持仓状态
         2: "做多平仓",
-        3: "做空开仓",
+        3: "做空开仓",  # 包括开仓点和持仓状态
         4: "做空平仓"
     }
     

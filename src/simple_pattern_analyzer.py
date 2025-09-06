@@ -76,10 +76,10 @@ def categorize_patterns(patterns):
     根据信号类型对模式进行分类
     """
     categorized = {
-        1: [],  # 做空开仓
-        2: [],  # 做空平仓
-        3: [],  # 做多开仓
-        4: []   # 做多平仓
+        1: [],  # 做多开仓（包括开仓点和持仓状态）
+        2: [],  # 做多平仓
+        3: [],  # 做空开仓（包括开仓点和持仓状态）
+        4: []   # 做空平仓
     }
     
     for pattern in patterns:
@@ -129,10 +129,10 @@ def visualize_patterns(categorized_patterns, top_k=5):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
     label_names = {
-        1: 'Short Open',
-        2: 'Short Close',
-        3: 'Long Open',
-        4: 'Long Close'
+        1: 'Long Open/Holding',  # 做多开仓（包括开仓点和持仓状态）
+        2: 'Long Close',         # 做多平仓
+        3: 'Short Open/Holding', # 做空开仓（包括开仓点和持仓状态）
+        4: 'Short Close'         # 做空平仓
     }
     
     for label, patterns in categorized_patterns.items():
@@ -176,10 +176,10 @@ def save_pattern_analysis(stats):
     # 创建统计结果DataFrame
     results = []
     label_names = {
-        1: 'Short Open',
-        2: 'Short Close',
-        3: 'Long Open',
-        4: 'Long Close'
+        1: 'Long Open/Holding',  # 做多开仓（包括开仓点和持仓状态）
+        2: 'Long Close',         # 做多平仓
+        3: 'Short Open/Holding', # 做空开仓（包括开仓点和持仓状态）
+        4: 'Short Close'         # 做空平仓
     }
     
     for label, stat in stats.items():

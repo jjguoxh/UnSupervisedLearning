@@ -28,7 +28,7 @@ def choose_time_axis(df: pd.DataFrame) -> np.ndarray:
     """优先使用 ['time','timestamp','datetime','x']，否则用顺序索引。"""
     for col in ["time", "timestamp", "datetime", "x"]:
         if col in df.columns:
-            return df[col].values
+            return np.array(df[col].values)
     return np.arange(len(df))
 
 def detect_data_format(df: pd.DataFrame):
@@ -536,6 +536,55 @@ def generate_labels_for_file(csv_file_path, output_dir):
         else:
             labels[idx] = action_list[0]
     
+    # 标记持仓状态：在开仓和平仓之间的所有点都标记为开仓状态
+    # 收集所有开仓和平仓的位置
+    long_entries = []   # 做多开仓位置
+    long_exits = []     # 做多平仓位置
+    short_entries = []  # 做空开仓位置
+    short_exits = []    # 做空平仓位置
+    
+    for i in range(len(labels)):
+        if labels[i] == 1:  # 做多开仓
+            long_entries.append(i)
+        elif labels[i] == 2:  # 做多平仓
+            long_exits.append(i)
+        elif labels[i] == 3:  # 做空开仓
+            short_entries.append(i)
+        elif labels[i] == 4:  # 做空平仓
+            short_exits.append(i)
+    
+    # 为做多持仓标记标签1（合并1和5）
+    for i in range(len(long_entries)):
+        entry_idx = long_entries[i]
+        # 找到对应的平仓点
+        exit_idx = None
+        for exit_candidate in long_exits:
+            if exit_candidate > entry_idx:
+                exit_idx = exit_candidate
+                break
+        
+        # 如果找到了平仓点，则标记中间的所有点为做多开仓（原来为做多持仓）
+        if exit_idx is not None:
+            for j in range(entry_idx + 1, exit_idx):
+                if labels[j] == 0:  # 只有在当前是无操作状态时才标记
+                    labels[j] = 1  # 做多开仓（合并了原来的标签5）
+    
+    # 为做空持仓标记标签3（合并3和6）
+    for i in range(len(short_entries)):
+        entry_idx = short_entries[i]
+        # 找到对应的平仓点
+        exit_idx = None
+        for exit_candidate in short_exits:
+            if exit_candidate > entry_idx:
+                exit_idx = exit_candidate
+                break
+        
+        # 如果找到了平仓点，则标记中间的所有点为做空开仓（原来为做空持仓）
+        if exit_idx is not None:
+            for j in range(entry_idx + 1, exit_idx):
+                if labels[j] == 0:  # 只有在当前是无操作状态时才标记
+                    labels[j] = 3  # 做空开仓（合并了原来的标签6）
+    
     # 创建结果DataFrame
     result_df = df.copy()
     result_df["label"] = labels  # 动作标签
@@ -550,9 +599,9 @@ def generate_labels_for_file(csv_file_path, output_dir):
     # 打印详细统计信息
     action_labels = {
         0: "无操作",
-        1: "做多开仓",
+        1: "做多开仓",  # 合并了原来的标签1和5
         2: "做多平仓", 
-        3: "做空开仓",
+        3: "做空开仓",  # 合并了原来的标签3和6
         4: "做空平仓"
     }
     
@@ -562,7 +611,7 @@ def generate_labels_for_file(csv_file_path, output_dir):
     
     # 使用matplotlib显示index_value曲线和标签结果
     visualize_labels(df, labels, filename)
-    
+
 def visualize_labels(df, labels, filename):
     """
     可视化index_value曲线和标签结果
@@ -580,13 +629,13 @@ def visualize_labels(df, labels, filename):
     short_exit_points = []   # 做空平仓点 (label=4)
     
     for i, label in enumerate(labels):
-        if label == 1:  # 做多开仓
+        if label == 1:  # 做多开仓（包括原来的标签1和5）
             long_entry_points.append((i, df['index_value'].iloc[i]))
         elif label == 2:  # 做多平仓
             long_exit_points.append((i, df['index_value'].iloc[i]))
-        elif label == 3:  # 做空开仓（原为做多开仓）
+        elif label == 3:  # 做空开仓（包括原来的标签3和6）
             short_entry_points.append((i, df['index_value'].iloc[i]))
-        elif label == 4:  # 做空平仓（原为做多平仓）
+        elif label == 4:  # 做空平仓
             short_exit_points.append((i, df['index_value'].iloc[i]))
     
     # 绘制交易信号箭头

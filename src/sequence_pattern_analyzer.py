@@ -76,10 +76,10 @@ def identify_trading_pairs(sequences):
         close_signal = sorted_sequences[i + 1]
         
         # 检查是否为有效的交易对
-        # 做多交易对：标签3(开仓) -> 标签4(平仓)
-        # 做空交易对：标签1(开仓) -> 标签2(平仓)
-        is_long_pair = (open_signal['signal_label'] == 3 and close_signal['signal_label'] == 4)
-        is_short_pair = (open_signal['signal_label'] == 1 and close_signal['signal_label'] == 2)
+        # 做多交易对：标签1(开仓) -> 标签2(平仓)
+        # 做空交易对：标签3(开仓) -> 标签4(平仓)
+        is_long_pair = (open_signal['signal_label'] == 1 and close_signal['signal_label'] == 2)
+        is_short_pair = (open_signal['signal_label'] == 3 and close_signal['signal_label'] == 4)
         
         if is_long_pair or is_short_pair:
             pair = {

@@ -175,9 +175,9 @@ class RealtimePredictor:
         """
         signal_names = {
             0: "无操作",
-            1: "做多开仓",
+            1: "做多开仓",  # 包括开仓点和持仓状态
             2: "做多平仓",
-            3: "做空开仓",
+            3: "做空开仓",  # 包括开仓点和持仓状态
             4: "做空平仓"
         }
         return signal_names.get(signal, "未知信号")

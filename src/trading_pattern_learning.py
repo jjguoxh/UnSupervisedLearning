@@ -17,8 +17,8 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ========= 配置参数 =========
-LABEL_DIR = "../label/"  # 标签数据目录
-OUTPUT_DIR = "../patterns/"  # 模式输出目录
+LABEL_DIR = "./label/"  # 标签数据目录
+OUTPUT_DIR = "./patterns/"  # 模式输出目录
 N_CLUSTERS = 10  # 聚类数量
 WINDOW_SIZE = 20  # 时间窗口大小
 N_COMPONENTS = 5  # PCA降维后的主成分数量
@@ -162,11 +162,11 @@ def calculate_cluster_profitability(cluster_label_dist):
     """
     计算每个聚类的盈利能力
     标签定义：
-    0: 无操作
-    1: 做空开仓
-    2: 做空平仓
-    3: 做多开仓
-    4: 做多平仓
+    0: 无操作状态
+    1: 做多开仓（包括开仓点和持仓状态）
+    2: 做多平仓
+    3: 做空开仓（包括开仓点和持仓状态）
+    4: 做空平仓
     """
     cluster_profit = {}
     

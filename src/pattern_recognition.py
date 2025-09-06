@@ -15,8 +15,8 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ========= 配置参数 =========
-LABEL_DIR = "../label/"  # 标签数据目录
-OUTPUT_DIR = "../patterns/"  # 模式输出目录
+LABEL_DIR = "./label/"  # 标签数据目录
+OUTPUT_DIR = "./patterns/"  # 模式输出目录
 WINDOW_SIZE = 30  # 时间窗口大小（秒）
 PATTERN_LENGTH = 10  # 模式长度
 
@@ -67,11 +67,11 @@ def identify_trading_signals(df):
     """
     识别交易信号
     标签定义：
-    0: 无操作
-    1: 做空开仓
-    2: 做空平仓
-    3: 做多开仓
-    4: 做多平仓
+    0: 无操作状态
+    1: 做多开仓（包括开仓点和持仓状态）
+    2: 做多平仓
+    3: 做空开仓（包括开仓点和持仓状态）
+    4: 做空平仓
     """
     signals = []
     
@@ -342,7 +342,7 @@ def main():
     all_cluster_analysis = []
     
     # 处理前10个文件作为示例
-    for i, file_path in enumerate(label_files[:10]):
+    for i, file_path in enumerate(label_files):
         try:
             patterns, clusters, cluster_analysis = process_single_file(file_path)
             if patterns is not None:
