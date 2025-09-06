@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # ========= 配置参数 =========
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-LABEL_DIR = os.path.join(CURRENT_DIR, "..", "label/")  # 标签数据目录
+LABEL_DIR = os.path.join(CURRENT_DIR, "..", "predict/")  # 标签数据目录
 PATTERNS_DIR = os.path.join(CURRENT_DIR, "..", "patterns/")  # 模式数据目录
 STRICT_BALANCED_DIR = os.path.join(CURRENT_DIR, "..", "patterns/strict_balanced/")  # 严格平衡后的数据目录
 MODEL_DIR = os.path.join(CURRENT_DIR, "..", "model/balanced_model/")  # 平衡模型保存目录
@@ -228,11 +228,16 @@ class BalancedPatternPredictor:
         """
         logger.info("Generating visualization of predictions...")
         
+        # 检查是否包含实际标签（用于区分回测和实时预测）
+        has_actual_labels = 'actual_signal' in predictions[0] if predictions else False
+        
         # 准备数据
         indices = [pred['index'] for pred in predictions]
         predicted_signals = [pred['predicted_signal'] for pred in predictions]
-        actual_signals = [pred['actual_signal'] for pred in predictions]
         index_values = [df.iloc[i]['index_value'] for i in indices]
+        
+        # 如果有实际标签，也准备实际标签数据
+        actual_signals = [pred['actual_signal'] for pred in predictions] if has_actual_labels else None
         
         # 合并连续的同向开仓信号
         # 过滤预测信号，合并连续的同向开仓信号
@@ -240,7 +245,9 @@ class BalancedPatternPredictor:
         last_long_position = False  # 是否处于做多持仓状态
         last_short_position = False  # 是否处于做空持仓状态
         
-        for i, (idx, pred_signal, actual_signal) in enumerate(zip(indices, predicted_signals, actual_signals)):
+        for i, (idx, pred_signal) in enumerate(zip(indices, predicted_signals)):
+            actual_signal = actual_signals[i] if actual_signals else None
+            
             # 处理预测信号的合并逻辑
             if pred_signal == 1:  # 做多开仓
                 if not last_long_position:  # 如果当前不是做多持仓状态
@@ -333,44 +340,46 @@ class BalancedPatternPredictor:
             sc_idx, sc_val = zip(*short_close_indices)
             ax1.scatter(sc_idx, sc_val, color='green', marker='v', s=100, label='预测做空平仓', zorder=5)
         
-        # 标识实际信号（使用不同的标记）
-        actual_long_open_indices = []
-        actual_long_close_indices = []
-        actual_short_open_indices = []
-        actual_short_close_indices = []
-        
-        for i, (idx, actual_signal) in enumerate(zip(indices, actual_signals)):
-            if actual_signal == 1:  # 做多开仓
-                actual_long_open_indices.append((idx, index_values[i]))
-            elif actual_signal == 2:  # 做多平仓
-                actual_long_close_indices.append((idx, index_values[i]))
-            elif actual_signal == 3:  # 做空开仓
-                actual_short_open_indices.append((idx, index_values[i]))
-            elif actual_signal == 4:  # 做空平仓
-                actual_short_close_indices.append((idx, index_values[i]))
-        
-        # 在图表上标识实际信号
-        if actual_long_open_indices:
-            alo_idx, alo_val = zip(*actual_long_open_indices)
-            ax1.scatter(alo_idx, alo_val, color='red', marker='^', s=50, alpha=0.5, label='实际做多开仓', zorder=4)
+        # 如果有实际标签，标识实际信号（使用不同的标记）
+        if has_actual_labels and actual_signals:
+            actual_long_open_indices = []
+            actual_long_close_indices = []
+            actual_short_open_indices = []
+            actual_short_close_indices = []
             
-        if actual_long_close_indices:
-            alc_idx, alc_val = zip(*actual_long_close_indices)
-            ax1.scatter(alc_idx, alc_val, color='red', marker='v', s=50, alpha=0.5, label='实际做多平仓', zorder=4)
+            for i, (idx, actual_signal) in enumerate(zip(indices, actual_signals)):
+                if actual_signal == 1:  # 做多开仓
+                    actual_long_open_indices.append((idx, index_values[i]))
+                elif actual_signal == 2:  # 做多平仓
+                    actual_long_close_indices.append((idx, index_values[i]))
+                elif actual_signal == 3:  # 做空开仓
+                    actual_short_open_indices.append((idx, index_values[i]))
+                elif actual_signal == 4:  # 做空平仓
+                    actual_short_close_indices.append((idx, index_values[i]))
             
-        if actual_short_open_indices:
-            aso_idx, aso_val = zip(*actual_short_open_indices)
-            ax1.scatter(aso_idx, aso_val, color='green', marker='^', s=50, alpha=0.5, label='实际做空开仓', zorder=4)
-            
-        if actual_short_close_indices:
-            asc_idx, asc_val = zip(*actual_short_close_indices)
-            ax1.scatter(asc_idx, asc_val, color='green', marker='v', s=50, alpha=0.5, label='实际做空平仓', zorder=4)
+            # 在图表上标识实际信号
+            if actual_long_open_indices:
+                alo_idx, alo_val = zip(*actual_long_open_indices)
+                ax1.scatter(alo_idx, alo_val, color='red', marker='^', s=50, alpha=0.5, label='实际做多开仓', zorder=4)
+                
+            if actual_long_close_indices:
+                alc_idx, alc_val = zip(*actual_long_close_indices)
+                ax1.scatter(alc_idx, alc_val, color='red', marker='v', s=50, alpha=0.5, label='实际做多平仓', zorder=4)
+                
+            if actual_short_open_indices:
+                aso_idx, aso_val = zip(*actual_short_open_indices)
+                ax1.scatter(aso_idx, aso_val, color='green', marker='^', s=50, alpha=0.5, label='实际做空开仓', zorder=4)
+                
+            if actual_short_close_indices:
+                asc_idx, asc_val = zip(*actual_short_close_indices)
+                ax1.scatter(asc_idx, asc_val, color='green', marker='v', s=50, alpha=0.5, label='实际做空平仓', zorder=4)
         
         # 添加图例
         ax1.legend(loc='upper left')
         
         # 设置标题
-        plt.title('模式预测结果可视化（合并连续开仓信号）', fontsize=16)
+        title = '模式预测结果可视化（合并连续开仓信号）' if has_actual_labels else '实时预测结果可视化（合并连续开仓信号）'
+        plt.title(title, fontsize=16)
         
         # 添加网格
         ax1.grid(True, alpha=0.3)
@@ -521,6 +530,47 @@ class BalancedPatternPredictor:
         
         return mean_accuracy, std_accuracy, mean_signal_accuracy, std_signal_accuracy
     
+    def predict_realtime_signal(self, df):
+        """
+        实时预测函数，不需要标签数据
+        预测数据集最后一个点的信号
+        """
+        logger.info("Running real-time prediction...")
+        
+        # 预测最后一个点的信号
+        current_idx = len(df) - 1
+        predicted_signal, confidence = self.predict_signal(df, current_idx)
+        
+        logger.info(f"Real-time Prediction Results:")
+        logger.info(f"  Predicted Signal: {predicted_signal}")
+        logger.info(f"  Confidence: {confidence:.4f}")
+        
+        return predicted_signal, confidence
+
+    def predict_realtime_sequence(self, df, sequence_length=100):
+        """
+        实时预测函数，不需要标签数据
+        预测数据集最后sequence_length个点的信号序列
+        """
+        logger.info(f"Running real-time sequence prediction for last {sequence_length} points...")
+        
+        # 确定预测范围
+        start_idx = max(PATTERN_LENGTH, len(df) - sequence_length)
+        end_idx = len(df) - 1
+        
+        predictions = []
+        for i in range(start_idx, end_idx + 1):
+            # 进行预测
+            predicted_signal, confidence = self.predict_signal(df, i)
+            predictions.append({
+                'index': i,
+                'predicted_signal': predicted_signal,
+                'confidence': confidence
+            })
+        
+        logger.info(f"Real-time sequence prediction completed for {len(predictions)} points")
+        return predictions
+
     def predict_future_signal(self, df, steps_ahead=1):
         """
         预测未来的交易信号
@@ -615,10 +665,29 @@ def load_test_data(file_path):
         logger.error(f"Error loading test data from {file_path}: {e}")
         return None
 
+def load_realtime_data(file_path):
+    """
+    加载实时数据（不需要标签列）
+    """
+    try:
+        df = pd.read_csv(file_path)
+        logger.info(f"Successfully loaded real-time data from {file_path}")
+        return df
+    except Exception as e:
+        logger.error(f"Error loading real-time data from {file_path}: {e}")
+        return None
+
 def main():
     """
     主函数
     """
+    import sys
+    
+    # 检查命令行参数，看是否要运行实时预测
+    if len(sys.argv) > 1 and sys.argv[1] == '--realtime':
+        realtime_prediction_main()
+        return
+    
     # 创建预测器
     predictor = BalancedPatternPredictor()
     
@@ -663,6 +732,83 @@ def main():
     
     # 显示总体统计信息
     logger.info(f"\nCompleted processing {len(label_files)} files")
+
+def realtime_prediction_main():
+    """
+    实时预测主函数
+    """
+    # 创建预测器
+    predictor = BalancedPatternPredictor()
+    
+    # 获取实时数据文件
+    data_files = sorted(glob.glob(os.path.join(LABEL_DIR, "*.csv")))  # 可以修改为其他目录
+    logger.info(f"Found {len(data_files)} data files for real-time prediction")
+    if not data_files:
+        logger.error("No data files found!")
+        return
+    
+    # 为每个文件进行实时预测
+    for i, data_file in enumerate(data_files):
+        logger.info(f"\nProcessing real-time prediction for file {i+1}/{len(data_files)}: {data_file}")
+        
+        # 加载数据
+        df = load_realtime_data(data_file)
+        if df is None:
+            logger.error(f"Failed to load data from {data_file}")
+            continue
+        
+        # 进行实时预测（最后一个点）
+        predicted_signal, confidence = predictor.predict_realtime_signal(df)
+        
+        # 进行序列预测（最后100个点）
+        sequence_predictions = predictor.predict_realtime_sequence(df, sequence_length=100)
+        
+        # 保存预测结果
+        output_dir = os.path.join(CURRENT_DIR, "..", "predictions/")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # 保存单点预测结果
+        file_name = os.path.splitext(os.path.basename(data_file))[0]
+        single_prediction_path = os.path.join(output_dir, f"realtime_prediction_{file_name}.json")
+        
+        single_result = {
+            'file': data_file,
+            'predicted_signal': int(predicted_signal),
+            'confidence': float(confidence),
+            'timestamp': pd.Timestamp.now().isoformat()
+        }
+        
+        try:
+            with open(single_prediction_path, 'w', encoding='utf-8') as f:
+                json.dump(single_result, f, ensure_ascii=False, indent=2)
+            logger.info(f"Single point prediction saved to {single_prediction_path}")
+        except Exception as e:
+            logger.error(f"Error saving single point prediction: {e}")
+        
+        # 保存序列预测结果
+        sequence_prediction_path = os.path.join(output_dir, f"realtime_sequence_prediction_{file_name}.json")
+        sequence_results = {
+            'file': data_file,
+            'predictions': sequence_predictions,
+            'timestamp': pd.Timestamp.now().isoformat()
+        }
+        
+        try:
+            with open(sequence_prediction_path, 'w', encoding='utf-8') as f:
+                json.dump(sequence_results, f, ensure_ascii=False, indent=2)
+            logger.info(f"Sequence prediction saved to {sequence_prediction_path}")
+        except Exception as e:
+            logger.error(f"Error saving sequence prediction: {e}")
+        
+        # 生成可视化结果
+        output_dir = os.path.join(CURRENT_DIR, "..", "visualization/")
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, f"realtime_prediction_{file_name}.png")
+        predictor.visualize_predictions(df, sequence_predictions, output_path)
+        
+        logger.info(f"Visualization saved to {output_path}")
+    
+    logger.info(f"\nCompleted real-time prediction for {len(data_files)} files")
 
 if __name__ == "__main__":
     main()

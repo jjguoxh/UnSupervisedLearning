@@ -36,13 +36,13 @@ echo.
 choice /c 123 /m "请选择模式"
 if %errorlevel%==1 (
     echo 启动目录监控模式...
-    python src\realtime_predictor.py
+    python src\realtime_predictor.py --mode monitor
 ) else if %errorlevel%==2 (
     echo 启动数据模拟模式...
-    python src\realtime_predictor.py
+    python src\realtime_predictor.py --mode simulate
 ) else if %errorlevel%==3 (
     echo 启动交互模式...
-    python src\realtime_predictor.py
+    python src\realtime_predictor.py --mode interactive
 )
 
 if %errorlevel% neq 0 (
@@ -56,6 +56,7 @@ echo ===========================================================================
 echo 实时预测程序已退出
 echo ===============================================================================
 echo 预测结果保存在: predictions\
+echo 可视化结果保存在: visualization\
 echo.
 
 pause

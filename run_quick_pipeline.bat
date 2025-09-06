@@ -63,7 +63,7 @@ echo.
 
 echo [4/4] 正在运行信号预测...
 echo ===============================================================================
-python src\pattern_predictor.py
+python src\pattern_predictor_balanced.py
 if %errorlevel% neq 0 (
     echo 错误: 信号预测失败
     pause
@@ -80,6 +80,7 @@ echo   - 标签文件: label\*.csv
 echo   - 模式文件: patterns\
 echo   - 训练模型: patterns\
 echo   - 预测结果: predictions\
+echo   - 可视化结果: visualization\
 echo.
 echo 完成时间: %date% %time%
 echo ===============================================================================

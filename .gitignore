@@ -1,0 +1,15 @@
+/.github
+/.idea
+/.vscode
+./src/_pycache_
+./src/.vscode
+./toolbox/indexmultday/sub_images/*.png
+*.pyc
+*.csv
+/.git
+/.github
+*.log
+*.pth
+*.png
+*.json
+./data/*.csv

@@ -94,7 +94,7 @@ echo.
 if /i "%RUN_PATTERN_PREDICTION%"=="y" (
     echo [4/4] 正在运行信号预测...
     echo ===============================================================================
-    python src\pattern_predictor.py
+    python src\pattern_predictor_balanced.py
     if %errorlevel% neq 0 (
         echo 错误: 信号预测失败
         pause
@@ -119,7 +119,10 @@ echo 结果文件位置:
 if /i "%REGEN_LABELS%"=="y" echo   - 标签文件: label\*.csv
 if /i "%RUN_PATTERN_RECOGNITION%"=="y" echo   - 模式文件: patterns\
 if /i "%RUN_PATTERN_TRAINING%"=="y" echo   - 训练模型: patterns\
-if /i "%RUN_PATTERN_PREDICTION%"=="y" echo   - 预测结果: predictions\
+if /i "%RUN_PATTERN_PREDICTION%"=="y" (
+    echo   - 预测结果: predictions\
+    echo   - 可视化结果: visualization\
+)
 echo.
 echo 完成时间: %date% %time%
 echo ===============================================================================

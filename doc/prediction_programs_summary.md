@@ -2,12 +2,12 @@
 
 ## 项目概述
 
-基于[pattern_recognition.py](file:///e:/unsupervised_learning/src/pattern_recognition.py)模型，我们成功开发了两个交易模式预测程序：
+基于[pattern_recognition.py](file:///E:/unsupervised_learning/src/pattern_recognition.py)模型，我们成功开发了两个交易模式预测程序：
 
-1. **离线预测程序** ([pattern_predictor.py](file:///e:/unsupervised_learning/src/pattern_predictor.py))
-2. **实时预测程序** ([realtime_predictor.py](file:///e:/unsupervised_learning/src/realtime_predictor.py))
+1. **离线预测程序** ([pattern_predictor.py](file:///E:/unsupervised_learning/src/pattern_predictor.py))
+2. **实时预测程序** ([realtime_predictor.py](file:///E:/unsupervised_learning/src/realtime_predictor.py))
 
-## 离线预测程序 ([pattern_predictor.py](file:///e:/unsupervised_learning/src/pattern_predictor.py))
+## 离线预测程序 ([pattern_predictor.py](file:///E:/unsupervised_learning/src/pattern_predictor.py))
 
 ### 功能特点
 - 加载已学习的交易模式聚类
@@ -16,16 +16,16 @@
 - 保存模型参数供实时预测使用
 
 ### 技术实现
-- 从[patterns](file:///e:/unsupervised_learning/patterns/)目录加载聚类分析结果
+- 从[patterns](file:///E:/unsupervised_learning/patterns/)目录加载聚类分析结果
 - 为信号密度>0.3的聚类创建预测模型
 - 使用皮尔逊相关系数计算模式相似性
-- 保存模型到[model](file:///e:/unsupervised_learning/model/)目录
+- 保存模型到[model](file:///E:/unsupervised_learning/model/)目录
 
 ### 测试结果
 - 在历史数据上的回测准确率达到100%
 - 成功识别并保存了2个具有较高信号密度的聚类模型（聚类6和23）
 
-## 实时预测程序 ([realtime_predictor.py](file:///e:/unsupervised_learning/src/realtime_predictor.py))
+## 实时预测程序 ([realtime_predictor.py](file:///E:/unsupervised_learning/src/realtime_predictor.py))
 
 ### 功能特点
 - 实时监控数据流并进行交易信号预测
@@ -44,7 +44,7 @@
 ### 测试结果
 - 成功加载训练好的模型
 - 能够处理实时数据流
-- 预测结果已成功保存到[predictions](file:///e:/unsupervised_learning/predictions/)目录
+- 预测结果已成功保存到[predictions](file:///E:/unsupervised_learning/predictions/)目录
 
 ## 模型详情
 
@@ -52,13 +52,19 @@
 
 1. **聚类6** (信号密度: 0.33)
    - 包含3个模式样本
-   - 信号分布: {3: 2, 4: 1} (做多开仓: 2, 做多平仓: 1)
-   - 配对交易: 1组完整做多交易
+   - 信号分布: {3: 2, 4: 1} (做空开仓: 2, 做空平仓: 1)
+   - 配对交易: 1组完整做空交易
 
 2. **聚类23** (信号密度: 0.5)
    - 包含2个模式样本
-   - 信号分布: {3: 1, 4: 1} (做多开仓: 1, 做多平仓: 1)
-   - 配对交易: 1组完整做多交易
+   - 信号分布: {3: 1, 4: 1} (做空开仓: 1, 做空平仓: 1)
+   - 配对交易: 1组完整做空交易
+
+## 标签系统更新说明
+
+根据最新需求，标签系统已进行简化：
+- 标签1和5已合并为标签1（做多开仓，包括开仓点和持仓状态）
+- 标签3和6已合并为标签3（做空开仓，包括开仓点和持仓状态）
 
 ## 文件结构
 

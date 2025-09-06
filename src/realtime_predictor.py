@@ -1,419 +1,414 @@
 # -*- coding: utf-8 -*-
 """
 实时预测程序
-实时监控数据流并进行交易信号预测
+基于已训练的模式模型进行实时交易信号预测
 """
 
 import pandas as pd
 import numpy as np
 import os
-import time
+import glob
 import json
-import threading
-from collections import deque
-from datetime import datetime
+import logging
 import warnings
+import sys
+import argparse
+from collections import Counter
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from pattern_predictor_balanced import BalancedPatternPredictor, load_realtime_data
+
 warnings.filterwarnings('ignore')
 
-# ========= 配置参数 =========
-MODEL_DIR = "../model/"  # 模型保存目录
-REALTIME_DATA_DIR = "../realtime_data/"  # 实时数据目录
-PREDICTIONS_DIR = "../predictions/"  # 预测结果目录
-PATTERN_LENGTH = 10  # 模式长度
-CHECK_INTERVAL = 5  # 检查新数据的间隔（秒）
+# 设置中文字体支持
+plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
 
-class RealtimePredictor:
-    def __init__(self):
-        self.model = None
-        self.data_buffer = deque(maxlen=1000)  # 保存最近1000个数据点
-        self.last_processed_file = None
-        self.load_model()
-        self.setup_directories()
-        
-    def setup_directories(self):
-        """
-        设置必要的目录
-        """
-        os.makedirs(REALTIME_DATA_DIR, exist_ok=True)
-        os.makedirs(PREDICTIONS_DIR, exist_ok=True)
-        
-    def load_model(self):
-        """
-        加载训练好的模型
-        """
-        model_path = os.path.join(MODEL_DIR, "pattern_predictor_model.json")
-        if not os.path.exists(model_path):
-            print("Error: Model file not found! Please run pattern_predictor.py first.")
-            return False
-            
-        try:
-            with open(model_path, 'r', encoding='utf-8') as f:
-                model_data = json.load(f)
-            
-            self.model = model_data
-            print("Model loaded successfully.")
-            return True
-        except Exception as e:
-            print(f"Error loading model: {e}")
-            return False
+# 设置日志记录
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# ========= 配置参数 =========
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(CURRENT_DIR, "..", "realtime_data/")  # 实时数据目录
+PREDICTIONS_DIR = os.path.join(CURRENT_DIR, "..", "predictions/")  # 预测结果目录
+VISUALIZATION_DIR = os.path.join(CURRENT_DIR, "..", "visualization/")  # 可视化结果目录
+
+def monitor_directory_and_predict():
+    """
+    监控目录并进行实时预测
+    """
+    logger.info("Starting directory monitoring for real-time prediction...")
+    logger.info(f"Monitoring directory: {DATA_DIR}")
     
-    def load_realtime_data(self, file_path):
-        """
-        加载实时数据
-        """
-        try:
-            df = pd.read_csv(file_path)
-            return df
-        except Exception as e:
-            print(f"Error loading data file {file_path}: {e}")
-            return None
+    # 确保目录存在
+    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(PREDICTIONS_DIR, exist_ok=True)
+    os.makedirs(VISUALIZATION_DIR, exist_ok=True)
     
-    def update_data_buffer(self, df):
-        """
-        更新数据缓冲区
-        """
-        for _, row in df.iterrows():
-            data_point = {
-                'x': row['x'],
-                'a': row['a'],
-                'b': row['b'],
-                'c': row['c'],
-                'd': row['d'],
-                'index_value': row['index_value'],
-                'label': row.get('label', 0)  # 如果没有标签列，则默认为0
-            }
-            self.data_buffer.append(data_point)
+    # 创建预测器
+    predictor = BalancedPatternPredictor()
     
-    def extract_recent_pattern(self, buffer_data, pattern_length=PATTERN_LENGTH):
-        """
-        从缓冲区数据中提取最近的模式
-        """
-        if len(buffer_data) < pattern_length:
-            return None
-            
-        # 取最近的pattern_length个数据点
-        recent_data = list(buffer_data)[-pattern_length:]
-        
-        return {
-            'index_value': np.array([point['index_value'] for point in recent_data]),
-            'a': np.array([point['a'] for point in recent_data]),
-            'b': np.array([point['b'] for point in recent_data]),
-            'c': np.array([point['c'] for point in recent_data]),
-            'd': np.array([point['d'] for point in recent_data]),
-            'x': np.array([point['x'] for point in recent_data])
-        }
+    # 记录已处理的文件
+    processed_files = set()
     
-    def calculate_pattern_similarity(self, pattern1, pattern2):
-        """
-        计算两个模式的相似性
-        """
-        if len(pattern1) != len(pattern2):
-            return 0
-            
-        # 使用皮尔逊相关系数计算相似性
-        try:
-            correlation = np.corrcoef(pattern1, pattern2)[0, 1]
-            return correlation if not np.isnan(correlation) else 0
-        except:
-            return 0
-    
-    def predict_signal(self):
-        """
-        基于当前数据缓冲区进行信号预测
-        """
-        if not self.model or len(self.data_buffer) < PATTERN_LENGTH:
-            return 0, 0.0
-        
-        # 提取最近的模式
-        recent_pattern = self.extract_recent_pattern(self.data_buffer)
-        if recent_pattern is None:
-            return 0, 0.0
-        
-        # 计算与各聚类模式的相似性
-        best_cluster = None
-        best_similarity = -1
-        best_signal = 0
-        best_confidence = 0
-        
-        # 遍历所有聚类模型
-        for cluster_id, model_info in self.model.get('cluster_models', {}).items():
-            try:
-                # 获取该聚类的平均模式
-                avg_pattern = np.array(model_info['avg_pattern'])
-                
-                # 计算与该聚类平均模式的相似性
-                similarity = self.calculate_pattern_similarity(
-                    recent_pattern['index_value'], 
-                    avg_pattern
-                )
-                
-                # 如果相似性更高，更新最佳匹配
-                if similarity > best_similarity and similarity > 0.7:  # 相似性阈值
-                    best_similarity = similarity
-                    best_cluster = cluster_id
-                    
-                    # 根据聚类中最常见的信号类型进行预测
-                    patterns_info = self.model.get('patterns_info', {})
-                    if str(cluster_id) in patterns_info:
-                        cluster_info = patterns_info[str(cluster_id)]
-                        signal_counts = cluster_info.get('signal_counts', {})
-                        
-                        # 预测信号类型（选择最常见的信号）
-                        if signal_counts:
-                            predicted_signal = max(signal_counts, key=signal_counts.get)
-                            best_signal = int(predicted_signal)
-                            best_confidence = similarity * cluster_info.get('signal_density', 0)
-            except Exception as e:
-                print(f"Error processing cluster {cluster_id}: {e}")
-                continue
-        
-        return best_signal, best_confidence
-    
-    def get_signal_description(self, signal):
-        """
-        获取信号描述
-        """
-        signal_names = {
-            0: "无操作",
-            1: "做多开仓",  # 包括开仓点和持仓状态
-            2: "做多平仓",
-            3: "做空开仓",  # 包括开仓点和持仓状态
-            4: "做空平仓"
-        }
-        return signal_names.get(signal, "未知信号")
-    
-    def save_prediction(self, signal, confidence):
-        """
-        保存预测结果
-        """
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        prediction_data = {
-            'timestamp': timestamp,
-            'predicted_signal': signal,
-            'signal_description': self.get_signal_description(signal),
-            'confidence': confidence,
-            'data_points_in_buffer': len(self.data_buffer)
-        }
-        
-        # 保存为JSON文件
-        filename = f"prediction_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        filepath = os.path.join(PREDICTIONS_DIR, filename)
-        
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(prediction_data, f, ensure_ascii=False, indent=2)
-        
-        # 同时保存为CSV格式的汇总文件
-        self.update_predictions_csv(prediction_data)
-        
-        return filepath
-    
-    def update_predictions_csv(self, prediction_data):
-        """
-        更新预测结果的CSV汇总文件
-        """
-        csv_path = os.path.join(PREDICTIONS_DIR, "predictions_summary.csv")
-        
-        # 创建DataFrame
-        df = pd.DataFrame([prediction_data])
-        
-        # 如果文件存在，追加数据；否则创建新文件
-        if os.path.exists(csv_path):
-            existing_df = pd.read_csv(csv_path)
-            df = pd.concat([existing_df, df], ignore_index=True)
-        
-        df.to_csv(csv_path, index=False)
-    
-    def process_data_file(self, file_path):
-        """
-        处理单个数据文件
-        """
-        print(f"Processing data file: {file_path}")
-        
-        # 加载数据
-        df = self.load_realtime_data(file_path)
-        if df is None:
-            return
-        
-        # 更新数据缓冲区
-        self.update_data_buffer(df)
-        
-        # 进行预测
-        signal, confidence = self.predict_signal()
-        
-        # 保存预测结果
-        filepath = self.save_prediction(signal, confidence)
-        
-        # 打印预测结果
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Prediction: "
-              f"{self.get_signal_description(signal)} ({signal}), "
-              f"Confidence: {confidence:.3f}")
-        print(f"Prediction saved to: {filepath}")
-        
-        # 更新最后处理的文件
-        self.last_processed_file = file_path
-    
-    def monitor_data_directory(self):
-        """
-        监控数据目录中的新文件
-        """
-        print(f"Monitoring {REALTIME_DATA_DIR} for new data files...")
-        
-        processed_files = set()
-        
+    try:
         while True:
-            try:
-                # 获取目录中的所有CSV文件
-                csv_files = glob.glob(os.path.join(REALTIME_DATA_DIR, "*.csv"))
-                
-                # 处理新文件
-                for file_path in csv_files:
-                    if file_path not in processed_files:
-                        self.process_data_file(file_path)
-                        processed_files.add(file_path)
-                
-                # 等待一段时间后再次检查
-                time.sleep(CHECK_INTERVAL)
-                
-            except KeyboardInterrupt:
-                print("\nMonitoring stopped by user.")
-                break
-            except Exception as e:
-                print(f"Error during monitoring: {e}")
-                time.sleep(CHECK_INTERVAL)
-    
-    def simulate_realtime_data(self, base_file_path, interval=2):
-        """
-        模拟实时数据流（用于演示）
-        """
-        print("Simulating real-time data stream...")
-        
-        # 加载基础数据
-        try:
-            base_df = pd.read_csv(base_file_path)
-        except Exception as e:
-            print(f"Error loading base data: {e}")
-            return
-        
-        # 逐行添加数据到缓冲区并进行预测
-        for i in range(0, len(base_df), 5):  # 每次处理5行数据
-            # 获取一小段数据
-            chunk = base_df.iloc[i:min(i+5, len(base_df))]
+            # 获取目录中的所有CSV文件
+            data_files = sorted(glob.glob(os.path.join(DATA_DIR, "*.csv")))
             
-            # 更新数据缓冲区
-            self.update_data_buffer(chunk)
+            # 处理新文件
+            for data_file in data_files:
+                if data_file in processed_files:
+                    continue
+                
+                logger.info(f"Processing new data file: {data_file}")
+                
+                # 加载数据
+                df = load_realtime_data(data_file)
+                if df is None:
+                    logger.error(f"Failed to load data from {data_file}")
+                    continue
+                
+                # 进行实时预测（最后一个点）
+                predicted_signal, confidence = predictor.predict_realtime_signal(df)
+                
+                # 进行序列预测（最后100个点）
+                sequence_predictions = predictor.predict_realtime_sequence(df, sequence_length=100)
+                
+                # 保存预测结果
+                file_name = os.path.splitext(os.path.basename(data_file))[0]
+                single_prediction_path = os.path.join(PREDICTIONS_DIR, f"realtime_prediction_{file_name}.json")
+                
+                single_result = {
+                    'file': data_file,
+                    'predicted_signal': int(predicted_signal),
+                    'confidence': float(confidence),
+                    'timestamp': pd.Timestamp.now().isoformat()
+                }
+                
+                try:
+                    with open(single_prediction_path, 'w', encoding='utf-8') as f:
+                        json.dump(single_result, f, ensure_ascii=False, indent=2)
+                    logger.info(f"Single point prediction saved to {single_prediction_path}")
+                except Exception as e:
+                    logger.error(f"Error saving single point prediction: {e}")
+                
+                # 保存序列预测结果
+                sequence_prediction_path = os.path.join(PREDICTIONS_DIR, f"realtime_sequence_prediction_{file_name}.json")
+                sequence_results = {
+                    'file': data_file,
+                    'predictions': sequence_predictions,
+                    'timestamp': pd.Timestamp.now().isoformat()
+                }
+                
+                try:
+                    with open(sequence_prediction_path, 'w', encoding='utf-8') as f:
+                        json.dump(sequence_results, f, ensure_ascii=False, indent=2)
+                    logger.info(f"Sequence prediction saved to {sequence_prediction_path}")
+                except Exception as e:
+                    logger.error(f"Error saving sequence prediction: {e}")
+                
+                # 生成可视化结果（使用实时预测适配的可视化函数）
+                output_path = os.path.join(VISUALIZATION_DIR, f"realtime_prediction_{file_name}.png")
+                visualize_realtime_predictions(df, sequence_predictions, output_path)
+                
+                logger.info(f"Visualization saved to {output_path}")
+                
+                # 标记为已处理
+                processed_files.add(data_file)
+            
+            # 等待一段时间再检查
+            import time
+            time.sleep(5)  # 每5秒检查一次
+            
+    except KeyboardInterrupt:
+        logger.info("Directory monitoring stopped by user.")
+    except Exception as e:
+        logger.error(f"Error in directory monitoring: {e}")
+
+def visualize_realtime_predictions(df, predictions, output_path=None):
+    """
+    为实时预测结果生成可视化图表（不依赖实际标签）
+    
+    Parameters:
+    df: DataFrame - 包含测试数据的DataFrame
+    predictions: list - 预测结果列表
+    output_path: str - 输出图像文件路径，默认为None（显示图像而不保存）
+    """
+    logger.info("Generating visualization of real-time predictions...")
+    
+    # 准备数据
+    indices = [pred['index'] for pred in predictions]
+    predicted_signals = [pred['predicted_signal'] for pred in predictions]
+    index_values = [df.iloc[i]['index_value'] for i in indices]
+    
+    # 合并连续的同向开仓信号
+    # 过滤预测信号，合并连续的同向开仓信号
+    filtered_predictions = []
+    last_long_position = False  # 是否处于做多持仓状态
+    last_short_position = False  # 是否处于做空持仓状态
+    
+    for i, (idx, pred_signal) in enumerate(zip(indices, predicted_signals)):
+        # 处理预测信号的合并逻辑
+        if pred_signal == 1:  # 做多开仓
+            if not last_long_position:  # 如果当前不是做多持仓状态
+                filtered_predictions.append({
+                    'index': idx,
+                    'predicted_signal': pred_signal,
+                    'index_value': index_values[i]
+                })
+                last_long_position = True
+            # 如果已经是做多持仓状态，则忽略这个做多开仓信号
+        elif pred_signal == 3:  # 做空开仓
+            if not last_short_position:  # 如果当前不是做空持仓状态
+                filtered_predictions.append({
+                    'index': idx,
+                    'predicted_signal': pred_signal,
+                    'index_value': index_values[i]
+                })
+                last_short_position = True
+            # 如果已经是做空持仓状态，则忽略这个做空开仓信号
+        elif pred_signal == 2:  # 做多平仓
+            filtered_predictions.append({
+                'index': idx,
+                'predicted_signal': pred_signal,
+                'index_value': index_values[i]
+            })
+            last_long_position = False  # 重置做多持仓状态
+        elif pred_signal == 4:  # 做空平仓
+            filtered_predictions.append({
+                'index': idx,
+                'predicted_signal': pred_signal,
+                'index_value': index_values[i]
+            })
+            last_short_position = False  # 重置做空持仓状态
+        else:  # 无操作信号
+            filtered_predictions.append({
+                'index': idx,
+                'predicted_signal': pred_signal,
+                'index_value': index_values[i]
+            })
+            # 保持当前持仓状态不变
+    
+    # 创建图表
+    fig, ax1 = plt.subplots(figsize=(15, 8))
+    
+    # 绘制指数值曲线
+    ax1.plot(indices, index_values, 'b-', linewidth=1, label='指数值')
+    ax1.set_xlabel('时间索引')
+    ax1.set_ylabel('指数值', color='b')
+    ax1.tick_params(axis='y', labelcolor='b')
+    
+    # 标识过滤后的预测信号
+    long_open_indices = []    # 做多开仓
+    long_close_indices = []   # 做多平仓
+    short_open_indices = []   # 做空开仓
+    short_close_indices = []  # 做空平仓
+    
+    for pred in filtered_predictions:
+        idx = pred['index']
+        pred_signal = pred['predicted_signal']
+        index_val = pred['index_value']
+        
+        if pred_signal == 1:  # 做多开仓
+            long_open_indices.append((idx, index_val))
+        elif pred_signal == 2:  # 做多平仓
+            long_close_indices.append((idx, index_val))
+        elif pred_signal == 3:  # 做空开仓
+            short_open_indices.append((idx, index_val))
+        elif pred_signal == 4:  # 做空平仓
+            short_close_indices.append((idx, index_val))
+    
+    # 在图表上标识各种信号
+    if long_open_indices:
+        lo_idx, lo_val = zip(*long_open_indices)
+        ax1.scatter(lo_idx, lo_val, color='red', marker='^', s=100, label='预测做多开仓', zorder=5)
+        
+    if long_close_indices:
+        lc_idx, lc_val = zip(*long_close_indices)
+        ax1.scatter(lc_idx, lc_val, color='red', marker='v', s=100, label='预测做多平仓', zorder=5)
+        
+    if short_open_indices:
+        so_idx, so_val = zip(*short_open_indices)
+        ax1.scatter(so_idx, so_val, color='green', marker='^', s=100, label='预测做空开仓', zorder=5)
+        
+    if short_close_indices:
+        sc_idx, sc_val = zip(*short_close_indices)
+        ax1.scatter(sc_idx, sc_val, color='green', marker='v', s=100, label='预测做空平仓', zorder=5)
+    
+    # 添加图例
+    ax1.legend(loc='upper left')
+    
+    # 设置标题
+    plt.title('实时预测结果可视化（合并连续开仓信号）', fontsize=16)
+    
+    # 添加网格
+    ax1.grid(True, alpha=0.3)
+    
+    # 优化布局
+    plt.tight_layout()
+    
+    # 保存或显示图像
+    if output_path:
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Visualization saved to {output_path}")
+    else:
+        plt.show()
+    
+    plt.close()
+    
+    logger.info("Real-time visualization generation completed.")
+
+def simulate_realtime_data_stream():
+    """
+    模拟实时数据流进行预测
+    """
+    logger.info("Starting simulated real-time data stream...")
+    
+    # 创建预测器
+    predictor = BalancedPatternPredictor()
+    
+    # 获取一些历史数据用于模拟
+    label_files = sorted(glob.glob(os.path.join(CURRENT_DIR, "..", "label/", "*.csv")))
+    if not label_files:
+        logger.error("No label files found for simulation!")
+        return
+    
+    # 使用第一个文件作为模拟数据源
+    df = load_realtime_data(label_files[0])
+    if df is None:
+        logger.error("Failed to load data for simulation!")
+        return
+    
+    logger.info(f"Using {label_files[0]} as simulation data source")
+    
+    # 模拟实时预测
+    try:
+        for i in range(len(df) - 100, len(df)):
+            # 取前i个数据点作为当前数据
+            current_df = df.iloc[:i+1].copy()
             
             # 进行预测
-            signal, confidence = self.predict_signal()
+            predicted_signal, confidence = predictor.predict_realtime_signal(current_df)
             
-            # 保存预测结果
-            filepath = self.save_prediction(signal, confidence)
+            logger.info(f"Time step {i}: Predicted Signal = {predicted_signal}, Confidence = {confidence:.4f}")
             
-            # 打印预测结果
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Prediction: "
-                  f"{self.get_signal_description(signal)} ({signal}), "
-                  f"Confidence: {confidence:.3f}")
+            # 模拟延迟
+            import time
+            time.sleep(0.1)  # 100ms延迟
             
-            # 等待
-            time.sleep(interval)
+    except KeyboardInterrupt:
+        logger.info("Simulation stopped by user.")
+    except Exception as e:
+        logger.error(f"Error in simulation: {e}")
+
+def interactive_prediction_mode():
+    """
+    交互式预测模式
+    """
+    logger.info("Starting interactive prediction mode...")
     
-    def run_interactive_mode(self):
-        """
-        运行交互模式
-        """
-        print("Real-time Pattern Predictor - Interactive Mode")
-        print("=" * 50)
-        print("Commands:")
-        print("  'predict' - Make a prediction based on current buffer")
-        print("  'buffer' - Show buffer status")
-        print("  'last' - Show last prediction")
-        print("  'quit' - Exit the program")
-        print("=" * 50)
-        
-        while True:
-            try:
-                command = input("\nEnter command: ").strip().lower()
+    # 创建预测器
+    predictor = BalancedPatternPredictor()
+    
+    while True:
+        try:
+            print("\n" + "="*60)
+            print("交互式实时预测模式")
+            print("="*60)
+            print("1. 从文件加载数据并预测")
+            print("2. 目录监控模式")
+            print("3. 数据模拟模式")
+            print("4. 退出")
+            print("-"*60)
+            
+            choice = input("请选择操作 (1-4): ").strip()
+            
+            if choice == "1":
+                file_path = input("请输入CSV文件路径: ").strip()
+                if not os.path.exists(file_path):
+                    print("文件不存在!")
+                    continue
                 
-                if command == 'quit':
-                    print("Exiting...")
-                    break
-                elif command == 'predict':
-                    signal, confidence = self.predict_signal()
-                    filepath = self.save_prediction(signal, confidence)
-                    print(f"Prediction: {self.get_signal_description(signal)} ({signal}), "
-                          f"Confidence: {confidence:.3f}")
-                    print(f"Saved to: {filepath}")
-                elif command == 'buffer':
-                    print(f"Data points in buffer: {len(self.data_buffer)}")
-                    if self.data_buffer:
-                        print("Recent data points:")
-                        for i, point in enumerate(list(self.data_buffer)[-5:]):
-                            print(f"  {len(self.data_buffer)-5+i}: x={point['x']}, "
-                                  f"index_value={point['index_value']}, label={point['label']}")
-                elif command == 'last':
-                    # 显示最后一次预测
-                    csv_path = os.path.join(PREDICTIONS_DIR, "predictions_summary.csv")
-                    if os.path.exists(csv_path):
-                        df = pd.read_csv(csv_path)
-                        if not df.empty:
-                            last_pred = df.iloc[-1]
-                            print(f"Last prediction: {last_pred['timestamp']}")
-                            print(f"  Signal: {last_pred['signal_description']} ({last_pred['predicted_signal']})")
-                            print(f"  Confidence: {last_pred['confidence']:.3f}")
-                        else:
-                            print("No predictions yet.")
-                    else:
-                        print("No predictions yet.")
-                else:
-                    print("Unknown command. Available commands: predict, buffer, last, quit")
+                # 加载数据
+                df = load_realtime_data(file_path)
+                if df is None:
+                    print("加载数据失败!")
+                    continue
+                
+                # 进行预测
+                predicted_signal, confidence = predictor.predict_realtime_signal(df)
+                print(f"\n预测结果:")
+                print(f"  预测信号: {predicted_signal}")
+                print(f"  置信度: {confidence:.4f}")
+                
+                # 进行序列预测
+                sequence_predictions = predictor.predict_realtime_sequence(df, sequence_length=50)
+                print(f"  序列预测点数: {len(sequence_predictions)}")
+                
+                # 保存结果
+                save_choice = input("\n是否保存预测结果? (y/n): ").strip().lower()
+                if save_choice == 'y':
+                    file_name = os.path.splitext(os.path.basename(file_path))[0]
+                    output_path = os.path.join(PREDICTIONS_DIR, f"interactive_prediction_{file_name}.json")
+                    result = {
+                        'file': file_path,
+                        'predicted_signal': int(predicted_signal),
+                        'confidence': float(confidence),
+                        'sequence_predictions': sequence_predictions,
+                        'timestamp': pd.Timestamp.now().isoformat()
+                    }
                     
-            except KeyboardInterrupt:
-                print("\nExiting...")
+                    try:
+                        os.makedirs(PREDICTIONS_DIR, exist_ok=True)
+                        with open(output_path, 'w', encoding='utf-8') as f:
+                            json.dump(result, f, ensure_ascii=False, indent=2)
+                        print(f"预测结果已保存到: {output_path}")
+                    except Exception as e:
+                        print(f"保存预测结果时出错: {e}")
+                
+            elif choice == "2":
+                print("启动目录监控模式...")
+                print(f"请将CSV文件放入以下目录进行实时预测: {DATA_DIR}")
+                monitor_directory_and_predict()
+                
+            elif choice == "3":
+                print("启动数据模拟模式...")
+                simulate_realtime_data_stream()
+                
+            elif choice == "4":
+                print("退出交互模式.")
                 break
-            except Exception as e:
-                print(f"Error: {e}")
+                
+            else:
+                print("无效选择，请重新输入.")
+                
+        except KeyboardInterrupt:
+            print("\n\n程序被用户中断.")
+            break
+        except Exception as e:
+            print(f"发生错误: {e}")
 
 def main():
     """
     主函数
     """
-    # 创建实时预测器
-    predictor = RealtimePredictor()
+    parser = argparse.ArgumentParser(description='实时预测程序')
+    parser.add_argument('--mode', choices=['monitor', 'simulate', 'interactive'], 
+                       default='interactive', help='运行模式')
+    parser.add_argument('--file', help='用于预测的CSV文件路径')
     
-    if not predictor.model:
-        print("Failed to load model. Exiting.")
-        return
+    args = parser.parse_args()
     
-    print("Real-time Pattern Predictor")
-    print("=" * 30)
-    print("Select mode:")
-    print("1. Monitor directory for new files")
-    print("2. Simulate real-time data stream")
-    print("3. Interactive mode")
-    
-    try:
-        choice = input("Enter your choice (1-3): ").strip()
-        
-        if choice == '1':
-            predictor.monitor_data_directory()
-        elif choice == '2':
-            # 获取一个示例数据文件用于模拟
-            label_files = glob.glob("../label/*.csv")
-            if label_files:
-                predictor.simulate_realtime_data(label_files[0])
-            else:
-                print("No sample data files found for simulation.")
-        elif choice == '3':
-            predictor.run_interactive_mode()
-        else:
-            print("Invalid choice. Running in interactive mode...")
-            predictor.run_interactive_mode()
-            
-    except KeyboardInterrupt:
-        print("\nProgram terminated by user.")
-    except Exception as e:
-        print(f"Error: {e}")
+    if args.mode == 'monitor':
+        monitor_directory_and_predict()
+    elif args.mode == 'simulate':
+        simulate_realtime_data_stream()
+    elif args.mode == 'interactive':
+        interactive_prediction_mode()
+    else:
+        interactive_prediction_mode()
 
 if __name__ == "__main__":
-    import glob
     main()
