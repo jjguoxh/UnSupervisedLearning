@@ -187,11 +187,11 @@ def analyze_cluster_profitability(patterns, clusters):
         # 统计信号类型
         signal_counts = Counter(cluster_signals)
         
-        # 计算盈利能力指标
-        long_open = signal_counts[3]  # 做多开仓
-        long_close = signal_counts[4]  # 做多平仓
-        short_open = signal_counts[1]  # 做空开仓
-        short_close = signal_counts[2]  # 做空平仓
+        # 计算盈利能力指标（修正标签解释）
+        long_open = signal_counts[1]  # 做多开仓
+        long_close = signal_counts[2]  # 做多平仓
+        short_open = signal_counts[3]  # 做空开仓
+        short_close = signal_counts[4]  # 做空平仓
         
         # 计算配对信号数
         long_pairs = min(long_open, long_close)

@@ -173,10 +173,10 @@ def calculate_cluster_profitability(cluster_label_dist):
     for cluster_id, labels in cluster_label_dist.items():
         # 统计各类标签的数量
         label_counts = Counter(labels)
-        long_open_count = label_counts[3]  # 做多开仓
-        long_close_count = label_counts[4]  # 做多平仓
-        short_open_count = label_counts[1]  # 做空开仓
-        short_close_count = label_counts[2]  # 做空平仓
+        long_open_count = label_counts[1]  # 做多开仓
+        long_close_count = label_counts[2]  # 做多平仓
+        short_open_count = label_counts[3]  # 做空开仓
+        short_close_count = label_counts[4]  # 做空平仓
         no_action_count = label_counts[0]   # 无操作
         
         # 简单的盈利能力指标：开仓和平仓的匹配程度

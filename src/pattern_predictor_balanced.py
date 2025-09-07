@@ -297,10 +297,12 @@ class BalancedPatternPredictor:
         # 创建图表
         fig, ax1 = plt.subplots(figsize=(15, 8))
         
-        # 绘制指数值曲线
-        ax1.plot(indices, index_values, 'b-', linewidth=1, label='指数值')
+        # 绘制指数值曲线（上下翻转y值）
+        y_values = np.array(index_values)
+        y_flipped = -y_values  # 上下翻转y值
+        ax1.plot(indices, y_flipped, 'b-', linewidth=1, label='指数值')
         ax1.set_xlabel('时间索引')
-        ax1.set_ylabel('指数值', color='b')
+        ax1.set_ylabel('指数值 (翻转)', color='b')
         ax1.tick_params(axis='y', labelcolor='b')
         
         # 标识过滤后的预测信号
@@ -315,30 +317,31 @@ class BalancedPatternPredictor:
             index_val = pred['index_value']
             
             if pred_signal == 1:  # 做多开仓
-                long_open_indices.append((idx, index_val))
+                long_open_indices.append((idx, -index_val))  # 上下翻转y值
             elif pred_signal == 2:  # 做多平仓
-                long_close_indices.append((idx, index_val))
+                long_close_indices.append((idx, -index_val))  # 上下翻转y值
             elif pred_signal == 3:  # 做空开仓
-                short_open_indices.append((idx, index_val))
+                short_open_indices.append((idx, -index_val))  # 上下翻转y值
             elif pred_signal == 4:  # 做空平仓
-                short_close_indices.append((idx, index_val))
+                short_close_indices.append((idx, -index_val))  # 上下翻转y值
         
         # 在图表上标识各种信号
+        # 修正信号颜色：做多用绿色，做空用红色
         if long_open_indices:
             lo_idx, lo_val = zip(*long_open_indices)
-            ax1.scatter(lo_idx, lo_val, color='red', marker='^', s=100, label='预测做多开仓', zorder=5)
+            ax1.scatter(lo_idx, lo_val, color='green', marker='^', s=100, label='预测做多开仓', zorder=5)
             
         if long_close_indices:
             lc_idx, lc_val = zip(*long_close_indices)
-            ax1.scatter(lc_idx, lc_val, color='red', marker='v', s=100, label='预测做多平仓', zorder=5)
+            ax1.scatter(lc_idx, lc_val, color='green', marker='v', s=100, label='预测做多平仓', zorder=5)
             
         if short_open_indices:
             so_idx, so_val = zip(*short_open_indices)
-            ax1.scatter(so_idx, so_val, color='green', marker='^', s=100, label='预测做空开仓', zorder=5)
+            ax1.scatter(so_idx, so_val, color='red', marker='^', s=100, label='预测做空开仓', zorder=5)
             
         if short_close_indices:
             sc_idx, sc_val = zip(*short_close_indices)
-            ax1.scatter(sc_idx, sc_val, color='green', marker='v', s=100, label='预测做空平仓', zorder=5)
+            ax1.scatter(sc_idx, sc_val, color='red', marker='v', s=100, label='预测做空平仓', zorder=5)
         
         # 如果有实际标签，标识实际信号（使用不同的标记）
         if has_actual_labels and actual_signals:
@@ -349,30 +352,30 @@ class BalancedPatternPredictor:
             
             for i, (idx, actual_signal) in enumerate(zip(indices, actual_signals)):
                 if actual_signal == 1:  # 做多开仓
-                    actual_long_open_indices.append((idx, index_values[i]))
+                    actual_long_open_indices.append((idx, -index_values[i]))  # 上下翻转y值
                 elif actual_signal == 2:  # 做多平仓
-                    actual_long_close_indices.append((idx, index_values[i]))
+                    actual_long_close_indices.append((idx, -index_values[i]))  # 上下翻转y值
                 elif actual_signal == 3:  # 做空开仓
-                    actual_short_open_indices.append((idx, index_values[i]))
+                    actual_short_open_indices.append((idx, -index_values[i]))  # 上下翻转y值
                 elif actual_signal == 4:  # 做空平仓
-                    actual_short_close_indices.append((idx, index_values[i]))
+                    actual_short_close_indices.append((idx, -index_values[i]))  # 上下翻转y值
             
-            # 在图表上标识实际信号
+            # 在图表上标识实际信号（使用正确的颜色）
             if actual_long_open_indices:
                 alo_idx, alo_val = zip(*actual_long_open_indices)
-                ax1.scatter(alo_idx, alo_val, color='red', marker='^', s=50, alpha=0.5, label='实际做多开仓', zorder=4)
+                ax1.scatter(alo_idx, alo_val, color='green', marker='^', s=50, alpha=0.5, label='实际做多开仓', zorder=4)
                 
             if actual_long_close_indices:
                 alc_idx, alc_val = zip(*actual_long_close_indices)
-                ax1.scatter(alc_idx, alc_val, color='red', marker='v', s=50, alpha=0.5, label='实际做多平仓', zorder=4)
+                ax1.scatter(alc_idx, alc_val, color='green', marker='v', s=50, alpha=0.5, label='实际做多平仓', zorder=4)
                 
             if actual_short_open_indices:
                 aso_idx, aso_val = zip(*actual_short_open_indices)
-                ax1.scatter(aso_idx, aso_val, color='green', marker='^', s=50, alpha=0.5, label='实际做空开仓', zorder=4)
+                ax1.scatter(aso_idx, aso_val, color='red', marker='^', s=50, alpha=0.5, label='实际做空开仓', zorder=4)
                 
             if actual_short_close_indices:
                 asc_idx, asc_val = zip(*actual_short_close_indices)
-                ax1.scatter(asc_idx, asc_val, color='green', marker='v', s=50, alpha=0.5, label='实际做空平仓', zorder=4)
+                ax1.scatter(asc_idx, asc_val, color='red', marker='v', s=50, alpha=0.5, label='实际做空平仓', zorder=4)
         
         # 添加图例
         ax1.legend(loc='upper left')
@@ -715,9 +718,8 @@ def main():
         logger.info(f"Prediction Results for {os.path.basename(test_file)}:")
         logger.info(f"  Overall Accuracy: {accuracy:.2%}")
         
-        # 保存模型（仅对第一个文件执行一次）
-        if i == 0:
-            predictor.save_model()
+        # 保存模型（对所有文件都执行）
+        predictor.save_model()
         
         # 生成可视化结果
         output_dir = os.path.join(CURRENT_DIR, "..", "visualization/")

@@ -489,18 +489,18 @@ def generate_labels_for_file(csv_file_path, output_dir):
         # 记录开仓动作
         if i1 not in actions:
             actions[i1] = []
-        if seg["dir"] == 1:  # 上涨趋势
-            actions[i1].append(3)  # 做空开仓（原为做多开仓）
-        else:  # 下跌趋势
-            actions[i1].append(1)  # 做多开仓（原为做空开仓）
+        if seg["dir"] == 1:  # 上涨趋势（由于y值翻转，实际是下跌趋势，应为做多机会）
+            actions[i1].append(1)  # 做多开仓
+        else:  # 下跌趋势（由于y值翻转，实际是上涨趋势，应为做空机会）
+            actions[i1].append(3)  # 做空开仓
             
         # 记录平仓动作
         if i2 not in actions:
             actions[i2] = []
-        if seg["dir"] == 1:  # 上涨趋势
-            actions[i2].append(4)  # 做空平仓（原为做多平仓）
-        else:  # 下跌趋势
-            actions[i2].append(2)  # 做多平仓（原为做空平仓）
+        if seg["dir"] == 1:  # 上涨趋势（由于y值翻转，实际是下跌趋势，应为做多机会）
+            actions[i2].append(2)  # 做多平仓
+        else:  # 下跌趋势（由于y值翻转，实际是上涨趋势，应为做空机会）
+            actions[i2].append(4)  # 做空平仓
     
     # 处理同一位置的多个动作
     # 如果一个点既是平仓点又是开仓点，需要在下一个点标记开仓动作
@@ -619,8 +619,10 @@ def visualize_labels(df, labels, filename):
     # 创建图表
     fig, ax = plt.subplots(figsize=(15, 8))
     
-    # 绘制index_value曲线
-    ax.plot(df['index_value'], label='Index Value', color='blue', linewidth=1)
+    # 绘制index_value曲线（上下翻转y值）
+    y_values = df['index_value'].values
+    y_flipped = -y_values  # 上下翻转y值
+    ax.plot(range(len(y_flipped)), y_flipped, label='Index Value', color='blue', linewidth=1)
     
     # 提取各类标签点
     long_entry_points = []   # 做多开仓点 (label=1)
@@ -630,43 +632,44 @@ def visualize_labels(df, labels, filename):
     
     for i, label in enumerate(labels):
         if label == 1:  # 做多开仓（包括原来的标签1和5）
-            long_entry_points.append((i, df['index_value'].iloc[i]))
+            long_entry_points.append((i, -df['index_value'].iloc[i]))  # 上下翻转y值
         elif label == 2:  # 做多平仓
-            long_exit_points.append((i, df['index_value'].iloc[i]))
+            long_exit_points.append((i, -df['index_value'].iloc[i]))   # 上下翻转y值
         elif label == 3:  # 做空开仓（包括原来的标签3和6）
-            short_entry_points.append((i, df['index_value'].iloc[i]))
+            short_entry_points.append((i, -df['index_value'].iloc[i])) # 上下翻转y值
         elif label == 4:  # 做空平仓
-            short_exit_points.append((i, df['index_value'].iloc[i]))
+            short_exit_points.append((i, -df['index_value'].iloc[i]))  # 上下翻转y值
     
     # 绘制交易信号箭头
+    # 修正信号颜色：做多用绿色，做空用红色
     if long_entry_points:
         x, y = zip(*long_entry_points)
-        ax.scatter(x, y, color='red', marker='^', s=100, label='Long Entry', zorder=5)
+        ax.scatter(x, y, color='green', marker='^', s=100, label='Long Entry', zorder=5)
     
     if long_exit_points:
         x, y = zip(*long_exit_points)
-        ax.scatter(x, y, color='red', marker='v', s=100, label='Long Exit', zorder=5)
+        ax.scatter(x, y, color='green', marker='v', s=100, label='Long Exit', zorder=5)
     
     if short_entry_points:
         x, y = zip(*short_entry_points)
-        ax.scatter(x, y, color='green', marker='^', s=100, label='Short Entry', zorder=5)
+        ax.scatter(x, y, color='red', marker='^', s=100, label='Short Entry', zorder=5)
     
     if short_exit_points:
         x, y = zip(*short_exit_points)
-        ax.scatter(x, y, color='green', marker='v', s=100, label='Short Exit', zorder=5)
+        ax.scatter(x, y, color='red', marker='v', s=100, label='Short Exit', zorder=5)
     
     # 添加图例
     legend_elements = [
         Patch(facecolor='blue', label='Index Value'),
-        Patch(facecolor='red', label='Long Entry (^) / Exit (v)'),  # 做多信号用红色
-        Patch(facecolor='green', label='Short Entry (^) / Exit (v)')  # 做空信号用绿色
+        Patch(facecolor='green', label='Long Entry (^) / Exit (v)'),  # 做多信号用绿色
+        Patch(facecolor='red', label='Short Entry (^) / Exit (v)')  # 做空信号用红色
     ]
     ax.legend(handles=legend_elements, loc='upper left')
     
     # 设置标题和标签
     ax.set_title(f'Index Value with Trading Signals - {filename}')
     ax.set_xlabel('Time')
-    ax.set_ylabel('Index Value')
+    ax.set_ylabel('Index Value (Flipped)')
     ax.grid(True, alpha=0.3)
     
     # 调整布局
