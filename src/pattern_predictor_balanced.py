@@ -95,8 +95,10 @@ class BalancedPatternPredictor:
                 }
                 
                 # 为所有聚类创建预测模型（由于数据已平衡，可以为所有聚类创建模型）
-                self.cluster_models[cluster_id] = self.create_cluster_model(patterns)
-                loaded_clusters += 1
+                # 降低信号密度阈值，使用更多的聚类
+                if signal_density >= 0.1:  # 从0.3降低到0.1以增加模型数量
+                    self.cluster_models[cluster_id] = self.create_cluster_model(patterns)
+                    loaded_clusters += 1
         
         logger.info(f"Loaded {loaded_clusters} clusters, {len(self.cluster_models)} predictive models from balanced data")
     
@@ -109,10 +111,16 @@ class BalancedPatternPredictor:
             
         # 计算模式的统计特征
         index_values_list = []
+        diff_values_list = []
+        diff2_values_list = []
+        
         for pattern in patterns:
             if 'index_value' in pattern.columns:
                 index_values_list.append(pattern['index_value'].values)
-        
+            # 如果模式是字典格式（来自extract_recent_pattern）
+            elif isinstance(pattern, dict) and 'index_value' in pattern:
+                index_values_list.append(pattern['index_value'])
+                
         if not index_values_list:
             return None
             
@@ -139,7 +147,7 @@ class BalancedPatternPredictor:
             'std_pattern': std_pattern,
             'pattern_length': len(avg_pattern)
         }
-    
+
     def extract_recent_pattern(self, df, end_idx, pattern_length=PATTERN_LENGTH):
         """
         从数据中提取最近的模式
@@ -150,30 +158,184 @@ class BalancedPatternPredictor:
             
         pattern_data = df.iloc[start_idx:end_idx]
         
+        # 提取更多的特征
+        index_values = pattern_data['index_value'].values
+        
+        # 计算一些额外的特征
+        diff_values = np.diff(index_values, prepend=index_values[0])  # 一阶差分
+        diff2_values = np.diff(diff_values, prepend=diff_values[0])   # 二阶差分
+        
         return {
-            'index_value': pattern_data['index_value'].values,
+            'index_value': index_values,
+            'diff': diff_values,
+            'diff2': diff2_values,
             'a': pattern_data['a'].values,
             'b': pattern_data['b'].values,
             'c': pattern_data['c'].values,
             'd': pattern_data['d'].values,
             'x': pattern_data['x'].values
         }
-    
+
     def calculate_pattern_similarity(self, pattern1, pattern2):
         """
         计算两个模式的相似性
         """
-        if len(pattern1) != len(pattern2):
+        # 处理不同格式的输入
+        if isinstance(pattern1, dict):
+            pattern1_values = pattern1['index_value']
+        else:
+            pattern1_values = pattern1
+            
+        if isinstance(pattern2, dict):
+            pattern2_values = pattern2['index_value']
+        else:
+            pattern2_values = pattern2
+        
+        # 确保两个模式长度相同
+        if len(pattern1_values) != len(pattern2_values):
+            # 如果长度不同，使用较短的长度
+            min_length = min(len(pattern1_values), len(pattern2_values))
+            pattern1_values = pattern1_values[:min_length]
+            pattern2_values = pattern2_values[:min_length]
+            
+        if len(pattern1_values) == 0:
             return 0
             
-        # 使用皮尔逊相关系数计算相似性
+        # 使用多种相似性度量方法
         try:
-            correlation = np.corrcoef(pattern1, pattern2)[0, 1]
-            return correlation if not np.isnan(correlation) else 0
+            # 1. 皮尔逊相关系数
+            correlation = np.corrcoef(pattern1_values, pattern2_values)[0, 1]
+            corr_similarity = correlation if not np.isnan(correlation) else 0
+            
+            # 2. 欧几里得距离相似性
+            euclidean_distance = np.linalg.norm(pattern1_values - pattern2_values)
+            euclidean_similarity = 1 / (1 + euclidean_distance)
+            
+            # 3. 余弦相似性
+            dot_product = np.dot(pattern1_values, pattern2_values)
+            norms = np.linalg.norm(pattern1_values) * np.linalg.norm(pattern2_values)
+            cosine_similarity = dot_product / norms if norms != 0 else 0
+            
+            # 4. 动态时间规整(DTW)相似性（简化版本）
+            # 这里我们使用一个简化的DTW实现
+            dtw_similarity = 1 / (1 + self.calculate_dtw_distance(pattern1_values, pattern2_values))
+            
+            # 组合多种相似性度量
+            combined_similarity = (corr_similarity + euclidean_similarity + cosine_similarity + dtw_similarity) / 4
+            
+            return combined_similarity
         except Exception as e:
             logger.error(f"Error calculating pattern similarity: {e}")
             return 0
     
+    def calculate_dtw_distance(self, x, y):
+        """
+        计算两个序列之间的DTW距离（简化版本）
+        """
+        try:
+            # 简化的DTW实现
+            n, m = len(x), len(y)
+            dtw_matrix = np.zeros((n+1, m+1))
+            
+            # 初始化边界条件
+            for i in range(1, n+1):
+                dtw_matrix[i, 0] = np.inf
+            for j in range(1, m+1):
+                dtw_matrix[0, j] = np.inf
+            dtw_matrix[0, 0] = 0
+            
+            # 填充DTW矩阵
+            for i in range(1, n+1):
+                for j in range(1, m+1):
+                    cost = abs(x[i-1] - y[j-1])
+                    dtw_matrix[i, j] = cost + min(
+                        dtw_matrix[i-1, j],    # 插入
+                        dtw_matrix[i, j-1],    # 删除
+                        dtw_matrix[i-1, j-1]   # 匹配
+                    )
+            
+            return dtw_matrix[n, m]
+        except:
+            # 如果DTW计算失败，返回欧几里得距离作为备选
+            return np.linalg.norm(x - y)
+    
+    def predict_signal_ensemble(self, df, current_idx):
+        """
+        使用集成方法预测信号
+        """
+        # 提取最近的模式
+        recent_pattern = self.extract_recent_pattern(df, current_idx)
+        if recent_pattern is None:
+            return 0, 0.0  # 无操作或持仓，置信度0
+        
+        # 存储所有聚类的预测结果
+        predictions = []
+        
+        # 对每个聚类进行预测
+        for cluster_id, model in self.cluster_models.items():
+            if model is None:
+                continue
+            
+            # 计算与该聚类平均模式的相似性
+            similarity = self.calculate_pattern_similarity(
+                recent_pattern, 
+                model['avg_pattern']
+            )
+            
+            # 获取聚类信息
+            cluster_info = self.patterns[cluster_id]
+            signal_counts = cluster_info['signal_counts']
+            
+            # 预测信号类型（选择最常见的信号）
+            if signal_counts:
+                predicted_signal = max(signal_counts, key=signal_counts.get)
+                # 计算置信度
+                confidence = similarity * (1 + 2 * cluster_info['signal_density'])
+                
+                predictions.append({
+                    'cluster_id': cluster_id,
+                    'signal': predicted_signal,
+                    'confidence': confidence,
+                    'similarity': similarity,
+                    'signal_density': cluster_info['signal_density']
+                })
+        
+        # 如果没有预测结果，返回无操作
+        if not predictions:
+            return 0, 0.0
+        
+        # 根据置信度加权投票
+        signal_votes = {}
+        total_confidence = 0
+        
+        for pred in predictions:
+            signal = pred['signal']
+            confidence = pred['confidence']
+            
+            if signal not in signal_votes:
+                signal_votes[signal] = 0
+            signal_votes[signal] += confidence
+            total_confidence += confidence
+        
+        # 选择得票最高的信号
+        best_signal = max(signal_votes, key=signal_votes.get)
+        best_confidence = signal_votes[best_signal] / total_confidence if total_confidence > 0 else 0
+        
+        # 动态调整置信度阈值
+        dynamic_threshold = 0.1
+        # 如果投票一致性高，可以降低阈值
+        if len(signal_votes) == 1:
+            dynamic_threshold = 0.05
+        # 如果投票分散，需要提高阈值
+        elif len(signal_votes) > 3:
+            dynamic_threshold = 0.15
+        
+        # 只有当置信度足够高时才返回预测信号，否则返回0（无操作）
+        if best_confidence < dynamic_threshold:
+            return 0, 0.0
+        
+        return best_signal, best_confidence
+
     def predict_signal(self, df, current_idx):
         """
         预测在当前索引处的交易信号
@@ -195,12 +357,13 @@ class BalancedPatternPredictor:
             
             # 计算与该聚类平均模式的相似性
             similarity = self.calculate_pattern_similarity(
-                recent_pattern['index_value'], 
+                recent_pattern, 
                 model['avg_pattern']
             )
             
             # 如果相似性更高，更新最佳匹配
-            if similarity > best_similarity and similarity > 0.1:  # 保持原来的相似性阈值
+            # 降低相似性阈值以增加匹配机会
+            if similarity > best_similarity and similarity > 0.05:  # 从0.1降低到0.05
                 best_similarity = similarity
                 best_cluster = cluster_id
                 
@@ -214,9 +377,14 @@ class BalancedPatternPredictor:
                     best_signal = predicted_signal
                     # 调整置信度计算方式，增加信号密度的权重
                     best_confidence = similarity * (1 + 2 * cluster_info['signal_density'])
-    
+        
+        # 添加置信度阈值过滤
+        # 只有当置信度足够高时才返回预测信号，否则返回0（无操作）
+        if best_confidence < 0.1:  # 添加置信度阈值
+            return 0, 0.0
+        
         return best_signal, best_confidence
-
+    
     def visualize_predictions(self, df, predictions, output_path=None):
         """
         可视化预测结果，显示指数值曲线和交易信号
@@ -293,6 +461,41 @@ class BalancedPatternPredictor:
                     'index_value': index_values[i]
                 })
                 # 保持当前持仓状态不变
+        
+        # 打印过滤后的信号分布，用于调试
+        signal_counts = {}
+        for pred in filtered_predictions:
+            signal = pred['predicted_signal']
+            signal_counts[signal] = signal_counts.get(signal, 0) + 1
+        logger.info(f"Filtered signal distribution: {signal_counts}")
+        
+        # 计算每日收益
+        daily_profits = []
+        long_positions = []   # 存储做多开仓信息
+        short_positions = []  # 存储做空开仓信息
+        
+        for pred in filtered_predictions:
+            idx = pred['index']
+            pred_signal = pred['predicted_signal']
+            index_val = pred['index_value']
+            
+            # 处理做多交易
+            if pred_signal == 1:  # 做多开仓
+                long_positions.append((idx, index_val))
+            elif pred_signal == 2 and long_positions:  # 做多平仓
+                # 计算收益：平仓值 - 开仓值（指数是反向的，所以是负收益）
+                open_idx, open_value = long_positions.pop()
+                profit = open_value - index_val  # 做多时，指数下降是盈利
+                daily_profits.append((idx, profit, '做多', open_idx, open_value, index_val))
+                
+            # 处理做空交易
+            elif pred_signal == 3:  # 做空开仓
+                short_positions.append((idx, index_val))
+            elif pred_signal == 4 and short_positions:  # 做空平仓
+                # 计算收益：开仓值 - 平仓值（指数是反向的，所以是正收益）
+                open_idx, open_value = short_positions.pop()
+                profit = index_val - open_value  # 做空时，指数上升是盈利
+                daily_profits.append((idx, profit, '做空', open_idx, open_value, index_val))
         
         # 创建图表
         fig, ax1 = plt.subplots(figsize=(15, 8))
@@ -377,6 +580,21 @@ class BalancedPatternPredictor:
                 asc_idx, asc_val = zip(*actual_short_close_indices)
                 ax1.scatter(asc_idx, asc_val, color='red', marker='v', s=50, alpha=0.5, label='实际做空平仓', zorder=4)
         
+        # 添加每日收益信息到图表
+        if daily_profits:
+            # 计算累积收益
+            cumulative_profit = 0
+            profit_text = "每日收益:\n"
+            for i, (idx, profit, trade_type, open_idx, open_value, close_value) in enumerate(daily_profits[:5]):  # 只显示前5个
+                cumulative_profit += profit
+                profit_text += f"{idx}: {profit:.2f} ({trade_type})\n"
+            
+            profit_text += f"总收益: {cumulative_profit:.2f}"
+            
+            # 在图表上添加文本框
+            ax1.text(0.02, 0.98, profit_text, transform=ax1.transAxes, fontsize=10,
+                    verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+        
         # 添加图例
         ax1.legend(loc='upper left')
         
@@ -401,70 +619,6 @@ class BalancedPatternPredictor:
         
         logger.info("Visualization generation completed.")
 
-    def backtest_prediction(self, df, test_size=100):
-        """
-        对历史数据进行回测预测
-        """
-        logger.info("Running backtest prediction with balanced model...")
-        
-        # 确定测试范围
-        start_idx = max(PATTERN_LENGTH, len(df) - test_size)
-        end_idx = len(df) - 1
-        
-        predictions = []
-        actual_signals = []
-        correct_predictions = 0
-        total_predictions = 0
-        signal_predictions = 0  # 预测为信号的数量
-        signal_actual = 0  # 实际为信号的数量
-        
-        for i in range(start_idx, end_idx):
-            # 获取实际信号
-            actual_signal = df.iloc[i]['label']
-            actual_signals.append(actual_signal)
-            
-            # 进行预测
-            predicted_signal, confidence = self.predict_signal(df, i)
-            predictions.append({
-                'index': i,
-                'predicted_signal': predicted_signal,
-                'actual_signal': actual_signal,
-                'confidence': confidence
-            })
-            
-            # 统计信号数量
-            if predicted_signal != 0:
-                signal_predictions += 1
-            if actual_signal != 0:
-                signal_actual += 1
-            
-            # 检查预测是否正确
-            if predicted_signal == actual_signal:
-                correct_predictions += 1
-            total_predictions += 1
-    
-        # 计算准确率
-        accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
-        
-        # 计算信号预测的准确率
-        signal_accuracy = 0
-        if signal_actual > 0:
-            signal_matches = 0
-            for pred in predictions:
-                if pred['actual_signal'] != 0 and pred['predicted_signal'] == pred['actual_signal']:
-                    signal_matches += 1
-            signal_accuracy = signal_matches / signal_actual if signal_actual > 0 else 0
-    
-        logger.info(f"Backtest Results:")
-        logger.info(f"  Total predictions: {total_predictions}")
-        logger.info(f"  Correct predictions: {correct_predictions}")
-        logger.info(f"  Overall Accuracy: {accuracy:.2%}")
-        logger.info(f"  Signal predictions: {signal_predictions}")
-        logger.info(f"  Actual signals: {signal_actual}")
-        logger.info(f"  Signal accuracy (when actual signal exists): {signal_accuracy:.2%}")
-        
-        return predictions, accuracy
-    
     def time_series_cross_validate(self, df, n_splits=5):
         """
         使用时间序列交叉验证评估模型性能
@@ -532,6 +686,70 @@ class BalancedPatternPredictor:
         logger.info(f"  Mean Signal Accuracy: {mean_signal_accuracy:.2%} (+/- {std_signal_accuracy:.2%})")
         
         return mean_accuracy, std_accuracy, mean_signal_accuracy, std_signal_accuracy
+    
+    def backtest_prediction(self, df, test_size=100):
+        """
+        对历史数据进行回测预测
+        """
+        logger.info("Running backtest prediction with balanced model...")
+        
+        # 确定测试范围
+        start_idx = max(PATTERN_LENGTH, len(df) - test_size)
+        end_idx = len(df) - 1
+        
+        predictions = []
+        actual_signals = []
+        correct_predictions = 0
+        total_predictions = 0
+        signal_predictions = 0  # 预测为信号的数量
+        signal_actual = 0  # 实际为信号的数量
+        
+        for i in range(start_idx, end_idx):
+            # 获取实际信号
+            actual_signal = df.iloc[i]['label']
+            actual_signals.append(actual_signal)
+            
+            # 进行预测
+            predicted_signal, confidence = self.predict_signal(df, i)
+            predictions.append({
+                'index': i,
+                'predicted_signal': predicted_signal,
+                'actual_signal': actual_signal,
+                'confidence': confidence
+            })
+            
+            # 统计信号数量
+            if predicted_signal != 0:
+                signal_predictions += 1
+            if actual_signal != 0:
+                signal_actual += 1
+            
+            # 检查预测是否正确
+            if predicted_signal == actual_signal:
+                correct_predictions += 1
+            total_predictions += 1
+    
+        # 计算准确率
+        accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
+        
+        # 计算信号预测的准确率
+        signal_accuracy = 0
+        if signal_actual > 0:
+            signal_matches = 0
+            for pred in predictions:
+                if pred['actual_signal'] != 0 and pred['predicted_signal'] == pred['actual_signal']:
+                    signal_matches += 1
+            signal_accuracy = signal_matches / signal_actual if signal_actual > 0 else 0
+    
+        logger.info(f"Backtest Results:")
+        logger.info(f"  Total predictions: {total_predictions}")
+        logger.info(f"  Correct predictions: {correct_predictions}")
+        logger.info(f"  Overall Accuracy: {accuracy:.2%}")
+        logger.info(f"  Signal predictions: {signal_predictions}")
+        logger.info(f"  Actual signals: {signal_actual}")
+        logger.info(f"  Signal accuracy (when actual signal exists): {signal_accuracy:.2%}")
+        
+        return predictions, accuracy
     
     def predict_realtime_signal(self, df):
         """
@@ -702,6 +920,7 @@ def main():
         return
     
     # 为每个文件进行预测和可视化
+    all_accuracies = []
     for i, test_file in enumerate(label_files):
         logger.info(f"\nProcessing file {i+1}/{len(label_files)}: {test_file}")
         
@@ -713,10 +932,19 @@ def main():
         
         # 进行回测预测
         predictions, accuracy = predictor.backtest_prediction(df, test_size=100)
+        all_accuracies.append(accuracy)
         
         # 显示预测结果摘要
         logger.info(f"Prediction Results for {os.path.basename(test_file)}:")
         logger.info(f"  Overall Accuracy: {accuracy:.2%}")
+        
+        # 对第一个文件进行时间序列交叉验证
+        if i == 0:
+            logger.info("Running time series cross-validation on first file...")
+            mean_acc, std_acc, mean_signal_acc, std_signal_acc = predictor.time_series_cross_validate(df, n_splits=5)
+            logger.info(f"Cross-validation results for {os.path.basename(test_file)}:")
+            logger.info(f"  Mean Overall Accuracy: {mean_acc:.2%} (+/- {std_acc:.2%})")
+            logger.info(f"  Mean Signal Accuracy: {mean_signal_acc:.2%} (+/- {std_signal_acc:.2%})")
         
         # 保存模型（对所有文件都执行）
         predictor.save_model()
@@ -733,7 +961,13 @@ def main():
         logger.info(f"Visualization saved to {output_path}")
     
     # 显示总体统计信息
-    logger.info(f"\nCompleted processing {len(label_files)} files")
+    if all_accuracies:
+        mean_accuracy = np.mean(all_accuracies)
+        std_accuracy = np.std(all_accuracies)
+        logger.info(f"\nCompleted processing {len(label_files)} files")
+        logger.info(f"Overall Mean Accuracy: {mean_accuracy:.2%} (+/- {std_accuracy:.2%})")
+    else:
+        logger.info(f"\nCompleted processing {len(label_files)} files")
 
 def realtime_prediction_main():
     """
