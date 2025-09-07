@@ -27,8 +27,10 @@
   - `pattern_recognition.py` - 模式识别脚本
   - `trading_pattern_learning.py` - 交易模式学习脚本
   - `pattern_predictor.py` - 原始模式预测脚本
-  - `pattern_predictor_balanced.py` - 平衡模式预测脚本（改进版）
+  - `pattern_predictor_balanced.py` - 平衡模式预测脚本（改进版，集成强化学习优化）
   - `realtime_predictor.py` - 实时预测脚本
+  - `simple_rl_trader.py` - 简单强化学习交易器
+  - `rl_optimized_realtime_predictor.py` - 强化学习优化的实时预测脚本
 - `data/` - 原始数据目录
 - `label/` - 标签数据目录
 - `patterns/` - 模式数据目录
@@ -51,7 +53,7 @@
    - 标签生成
    - 模式识别
    - 模式训练
-   - 信号预测（使用平衡模式预测器）
+   - 信号预测（使用平衡模式预测器，集成强化学习优化）
 
 2. **快速流程脚本**:
    ```bash
@@ -74,16 +76,24 @@
    ```
    该脚本专门用于运行改进的平衡模式预测器，对所有标签文件进行预测并生成可视化结果。
 
+5. **强化学习优化实时预测脚本**:
+   ```bash
+   run_rl_optimized_prediction.bat
+   ```
+   该脚本启动强化学习优化的实时预测程序，使用强化学习模型进一步优化预测结果。
+
 ### 手动执行方式
 
 1. 准备数据：将CSV格式的价格数据放入`data/`目录
 2. 生成标签：运行`src/label_generation.py`
 3. 模式识别：运行`src/pattern_recognition.py`
 4. 模式训练：运行`src/trading_pattern_learning.py`
-5. 信号预测：
+5. 训练强化学习模型：运行`src/simple_rl_trader.py`
+6. 信号预测：
    - 原始预测器：运行`src/pattern_predictor.py`
    - 平衡预测器（推荐）：运行`src/pattern_predictor_balanced.py`
    - 实时预测器：运行`src/realtime_predictor.py`
+   - 强化学习优化预测器：运行`src/rl_optimized_realtime_predictor.py`
 
 ### 实时预测模式说明
 
@@ -102,6 +112,21 @@
    - 提供菜单式交互界面
    - 用户可以选择不同的操作，包括加载文件预测、启动监控模式等
 
+### 强化学习优化功能
+
+本项目新增了强化学习优化功能，通过以下方式提升预测性能：
+
+1. **训练强化学习模型**：
+   - 运行`src/simple_rl_trader.py`训练强化学习模型
+   - 模型将根据预测信号和实际信号的匹配情况学习最优决策策略
+
+2. **集成强化学习优化**：
+   - 平衡模式预测器(`pattern_predictor_balanced.py`)已集成强化学习优化功能
+   - 强化学习模型会根据预测信号的置信度和其他特征决定是否执行该信号
+
+3. **强化学习优化的实时预测**：
+   - 使用`rl_optimized_realtime_predictor.py`可以获得强化学习优化的实时预测结果
+
 ## 注意事项
 
 - 标签1和3现在表示开仓状态，包括开仓点和持仓状态
@@ -109,3 +134,4 @@
 - 平衡模式预测器使用严格平衡后的数据，提供更好的预测性能
 - 可视化结果保存在`visualization/`目录中，每个标签文件都有对应的预测可视化图像
 - 实时预测不需要标签数据，可以直接对原始价格数据进行预测
+- 强化学习模型会自动保存到`model/balanced_model/rl_trader_model.json`，可重复使用

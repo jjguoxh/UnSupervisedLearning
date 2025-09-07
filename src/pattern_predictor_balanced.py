@@ -15,6 +15,8 @@ import warnings
 from sklearn.model_selection import TimeSeriesSplit
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+# 导入强化学习交易器
+from simple_rl_trader import SimpleRLTrader
 warnings.filterwarnings('ignore')
 
 # 设置中文字体支持
@@ -27,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # ========= 配置参数 =========
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-LABEL_DIR = os.path.join(CURRENT_DIR, "..", "predict/")  # 标签数据目录
+LABEL_DIR = os.path.join(CURRENT_DIR, "..", "label/")  # 标签数据目录
 PATTERNS_DIR = os.path.join(CURRENT_DIR, "..", "patterns/")  # 模式数据目录
 STRICT_BALANCED_DIR = os.path.join(CURRENT_DIR, "..", "patterns/strict_balanced/")  # 严格平衡后的数据目录
 MODEL_DIR = os.path.join(CURRENT_DIR, "..", "model/balanced_model/")  # 平衡模型保存目录
@@ -38,6 +40,7 @@ class BalancedPatternPredictor:
         self.patterns = {}
         self.cluster_models = {}
         self.thresholds = {}
+        self.rl_trader = None  # 强化学习交易器
         self.load_patterns()
         
     def load_patterns(self):
@@ -800,6 +803,111 @@ class BalancedPatternPredictor:
         predicted_signal, confidence = self.predict_signal(df, current_idx - steps_ahead)
         return predicted_signal, confidence
     
+    def predict_signal_with_rl(self, df, current_idx):
+        """
+        使用强化学习优化的预测信号
+        """
+        # 首先获取基础预测
+        predicted_signal, confidence = self.predict_signal(df, current_idx)
+        
+        # 如果没有强化学习模型，直接返回基础预测
+        if self.rl_trader is None:
+            return predicted_signal, confidence
+        
+        # 使用强化学习模型决定是否执行该信号
+        action = self.rl_trader.predict(predicted_signal)
+        
+        # 如果强化学习模型建议忽略信号，则返回无操作
+        if action == 0:  # 忽略信号
+            return 0, 0.0
+        else:  # 执行信号
+            return predicted_signal, confidence
+
+    def train_rl_model(self, training_data_file):
+        """
+        训练强化学习模型
+        """
+        logger.info("Training reinforcement learning model...")
+        
+        # 加载带预测信号的数据
+        from simple_rl_trader import load_data_with_predictions
+        train_data = load_data_with_predictions(training_data_file)
+        if train_data is None:
+            logger.error("Failed to load training data for RL model")
+            return False
+        
+        # 创建并训练强化学习交易器
+        self.rl_trader = SimpleRLTrader(learning_rate=0.1, discount_factor=0.9, epsilon=0.1)
+        self.rl_trader.train(train_data, episodes=50)
+        
+        logger.info("Reinforcement learning model training completed")
+        return True
+
+    def save_rl_model(self, model_path=None):
+        """
+        保存强化学习模型
+        """
+        if self.rl_trader is None:
+            logger.warning("No RL model to save")
+            return False
+            
+        if model_path is None:
+            model_path = os.path.join(MODEL_DIR, "rl_trader_model.json")
+        
+        try:
+            # 将Q表转换为可序列化的格式
+            q_table_serializable = {}
+            for state, values in self.rl_trader.q_table.items():
+                q_table_serializable[state] = values.tolist()
+            
+            model_data = {
+                'q_table': q_table_serializable,
+                'learning_rate': self.rl_trader.learning_rate,
+                'discount_factor': self.rl_trader.discount_factor,
+                'epsilon': self.rl_trader.epsilon
+            }
+            
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            with open(model_path, 'w', encoding='utf-8') as f:
+                json.dump(model_data, f, ensure_ascii=False, indent=2)
+            logger.info(f"RL model saved to {model_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving RL model: {e}")
+            return False
+
+    def load_rl_model(self, model_path=None):
+        """
+        加载强化学习模型
+        """
+        if model_path is None:
+            model_path = os.path.join(MODEL_DIR, "rl_trader_model.json")
+        
+        if not os.path.exists(model_path):
+            logger.warning(f"RL model file not found: {model_path}")
+            return False
+            
+        try:
+            with open(model_path, 'r', encoding='utf-8') as f:
+                model_data = json.load(f)
+            
+            # 创建新的强化学习交易器
+            self.rl_trader = SimpleRLTrader(
+                learning_rate=model_data['learning_rate'],
+                discount_factor=model_data['discount_factor'],
+                epsilon=model_data['epsilon']
+            )
+            
+            # 恢复Q表
+            for state, values in model_data['q_table'].items():
+                self.rl_trader.q_table[state] = np.array(values)
+            
+            logger.info(f"RL model loaded from {model_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Error loading RL model: {e}")
+            return False
+
     def save_model(self):
         """
         保存模型参数
@@ -919,6 +1027,17 @@ def main():
         logger.error("No label files found!")
         return
     
+    # 训练强化学习模型（使用第一个文件）
+    if len(label_files) > 0:
+        logger.info("Training reinforcement learning model...")
+        predictor.train_rl_model(label_files[0])
+        # 保存强化学习模型
+        predictor.save_rl_model()
+    else:
+        # 如果没有数据用于训练，尝试加载已保存的模型
+        logger.info("Attempting to load existing RL model...")
+        predictor.load_rl_model()
+    
     # 为每个文件进行预测和可视化
     all_accuracies = []
     for i, test_file in enumerate(label_files):
@@ -930,13 +1049,63 @@ def main():
             logger.error(f"Failed to load test data from {test_file}")
             continue
         
-        # 进行回测预测
-        predictions, accuracy = predictor.backtest_prediction(df, test_size=100)
+        # 进行回测预测（使用强化学习优化的预测）
+        predictions = []
+        actual_signals = []
+        correct_predictions = 0
+        total_predictions = 0
+        signal_predictions = 0  # 预测为信号的数量
+        signal_actual = 0  # 实际为信号的数量
+        
+        # 确定测试范围
+        start_idx = max(PATTERN_LENGTH, len(df) - 100)
+        end_idx = len(df) - 1
+        
+        for idx in range(start_idx, end_idx):
+            # 获取实际信号
+            actual_signal = df.iloc[idx]['label']
+            actual_signals.append(actual_signal)
+            
+            # 使用强化学习优化的预测
+            predicted_signal, confidence = predictor.predict_signal_with_rl(df, idx)
+            predictions.append({
+                'index': idx,
+                'predicted_signal': predicted_signal,
+                'actual_signal': actual_signal,
+                'confidence': confidence
+            })
+            
+            # 统计信号数量
+            if predicted_signal != 0:
+                signal_predictions += 1
+            if actual_signal != 0:
+                signal_actual += 1
+            
+            # 检查预测是否正确
+            if predicted_signal == actual_signal:
+                correct_predictions += 1
+            total_predictions += 1
+
+        # 计算准确率
+        accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
         all_accuracies.append(accuracy)
         
-        # 显示预测结果摘要
+        # 计算信号预测的准确率
+        signal_accuracy = 0
+        if signal_actual > 0:
+            signal_matches = 0
+            for pred in predictions:
+                if pred['actual_signal'] != 0 and pred['predicted_signal'] == pred['actual_signal']:
+                    signal_matches += 1
+            signal_accuracy = signal_matches / signal_actual if signal_actual > 0 else 0
+
         logger.info(f"Prediction Results for {os.path.basename(test_file)}:")
+        logger.info(f"  Total predictions: {total_predictions}")
+        logger.info(f"  Correct predictions: {correct_predictions}")
         logger.info(f"  Overall Accuracy: {accuracy:.2%}")
+        logger.info(f"  Signal predictions: {signal_predictions}")
+        logger.info(f"  Actual signals: {signal_actual}")
+        logger.info(f"  Signal accuracy (when actual signal exists): {signal_accuracy:.2%}")
         
         # 对第一个文件进行时间序列交叉验证
         if i == 0:
