@@ -159,52 +159,47 @@ def visualize_realtime_predictions(df, predictions, output_path=None):
     index_values = [df.iloc[i]['index_value'] for i in indices]
     
     # 合并连续的同向开仓信号
-    # 过滤预测信号，合并连续的同向开仓信号
+    # 过滤预测信号，只保留交易信号（做多开仓、做多平仓、做空开仓、做空平仓）
     filtered_predictions = []
-    last_long_position = False  # 是否处于做多持仓状态
-    last_short_position = False  # 是否处于做空持仓状态
+    last_long_position = False  # 是否已发出做多开仓信号
+    last_short_position = False  # 是否已发出做空开仓信号
     
     for i, (idx, pred_signal) in enumerate(zip(indices, predicted_signals)):
-        # 处理预测信号的合并逻辑
-        if pred_signal == 1:  # 做多开仓
-            if not last_long_position:  # 如果当前不是做多持仓状态
+        # 只处理交易信号，过滤掉无操作信号(0)
+        if pred_signal != 0:
+            # 处理预测信号的合并逻辑
+            if pred_signal == 1:  # 做多开仓
+                if not last_long_position:  # 如果当前没有做多开仓信号
+                    filtered_predictions.append({
+                        'index': idx,
+                        'predicted_signal': pred_signal,
+                        'index_value': index_values[i]
+                    })
+                    last_long_position = True
+                # 如果已经发出了做多开仓信号，则忽略这个做多开仓信号
+            elif pred_signal == 3:  # 做空开仓
+                if not last_short_position:  # 如果当前没有做空开仓信号
+                    filtered_predictions.append({
+                        'index': idx,
+                        'predicted_signal': pred_signal,
+                        'index_value': index_values[i]
+                    })
+                    last_short_position = True
+                # 如果已经发出了做空开仓信号，则忽略这个做空开仓信号
+            elif pred_signal == 2:  # 做多平仓
                 filtered_predictions.append({
                     'index': idx,
                     'predicted_signal': pred_signal,
                     'index_value': index_values[i]
                 })
-                last_long_position = True
-            # 如果已经是做多持仓状态，则忽略这个做多开仓信号
-        elif pred_signal == 3:  # 做空开仓
-            if not last_short_position:  # 如果当前不是做空持仓状态
+                last_long_position = False  # 重置做多开仓信号状态
+            elif pred_signal == 4:  # 做空平仓
                 filtered_predictions.append({
                     'index': idx,
                     'predicted_signal': pred_signal,
                     'index_value': index_values[i]
                 })
-                last_short_position = True
-            # 如果已经是做空持仓状态，则忽略这个做空开仓信号
-        elif pred_signal == 2:  # 做多平仓
-            filtered_predictions.append({
-                'index': idx,
-                'predicted_signal': pred_signal,
-                'index_value': index_values[i]
-            })
-            last_long_position = False  # 重置做多持仓状态
-        elif pred_signal == 4:  # 做空平仓
-            filtered_predictions.append({
-                'index': idx,
-                'predicted_signal': pred_signal,
-                'index_value': index_values[i]
-            })
-            last_short_position = False  # 重置做空持仓状态
-        else:  # 无操作信号
-            filtered_predictions.append({
-                'index': idx,
-                'predicted_signal': pred_signal,
-                'index_value': index_values[i]
-            })
-            # 保持当前持仓状态不变
+                last_short_position = False  # 重置做空开仓信号状态
     
     # 创建图表
     fig, ax1 = plt.subplots(figsize=(15, 8))

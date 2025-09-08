@@ -28,7 +28,7 @@ if not exist "label" (
 echo ✓ 环境检查通过
 echo.
 
-echo 正在运行平衡模式预测...
+echo 正在运行平衡模式预测（集成强化学习优化）...
 echo ===============================================================================
 python src\pattern_predictor_balanced.py
 if %errorlevel% neq 0 (

@@ -329,7 +329,7 @@ def integrate_with_predictor():
     from pattern_predictor_balanced import BalancedPatternPredictor, load_test_data
     
     # 获取数据文件
-    data_files = sorted(glob.glob(os.path.join("..", "predict", "*.csv")))
+    data_files = sorted(glob.glob(os.path.join(".", "predict", "*.csv")))
     logger.info(f"Found {len(data_files)} data files")
     
     if not data_files:

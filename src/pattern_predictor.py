@@ -353,30 +353,30 @@ def main():
     for pred in predictions[-10:]:  # 显示最近10个预测
         signal_names = {
             0: "无操作",
-            1: "做多开仓",  # 包括开仓点和持仓状态
+            1: "做多开仓",
             2: "做多平仓",
-            3: "做空开仓",  # 包括开仓点和持仓状态
+            3: "做空开仓",
             4: "做空平仓"
         }
         
         print(f"Index {pred['index']}: Predicted={signal_names.get(pred['predicted_signal'], 'Unknown')} "
               f"({pred['predicted_signal']}), Actual={signal_names.get(pred['actual_signal'], 'Unknown')} "
               f"({pred['actual_signal']}), Confidence={pred['confidence']:.3f}")
-    
+
     # 预测下一个信号
     next_signal, confidence = predictor.predict_future_signal(df, steps_ahead=1)
     signal_names = {
         0: "无操作",
-        1: "做多开仓",  # 包括开仓点和持仓状态
+        1: "做多开仓",
         2: "做多平仓",
-        3: "做空开仓",  # 包括开仓点和持仓状态
+        3: "做空开仓",
         4: "做空平仓"
     }
     
     print(f"\nNext Signal Prediction:")
     print(f"  Predicted Signal: {signal_names.get(next_signal, 'Unknown')} ({next_signal})")
     print(f"  Confidence: {confidence:.3f}")
-    
+
     # 保存模型
     predictor.save_model()
 

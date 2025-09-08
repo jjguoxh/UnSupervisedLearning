@@ -1,8 +1,8 @@
 @echo off
-title 无监督学习交易信号识别系统 - 快速流程
+title 无监督学习交易信号识别系统 - 修改后工作流
 
 echo ===============================================================================
-echo 无监督学习交易信号识别系统 - 快速流程
+echo 无监督学习交易信号识别系统 - 修改后工作流
 echo ===============================================================================
 
 echo.
@@ -72,7 +72,7 @@ if %errorlevel% neq 0 (
 echo ✓ 强化学习模型训练完成
 echo.
 
-echo [5/5] 正在运行信号预测...
+echo [5/5] 正在运行平衡模式预测（集成强化学习优化）...
 echo ===============================================================================
 python src\pattern_predictor_balanced.py
 if %errorlevel% neq 0 (
@@ -84,17 +84,49 @@ echo ✓ 信号预测完成
 echo.
 
 echo ===============================================================================
-echo 无监督学习交易信号识别系统快速流程已完成!
+echo 无监督学习交易信号识别系统修改后工作流已完成!
 echo ===============================================================================
+echo 执行摘要:
+echo   - 标签生成: 已完成（使用修改后的标签生成逻辑）
+echo   - 模式识别: 已完成
+echo   - 模式训练: 已完成
+echo   - 强化学习训练: 已完成
+echo   - 信号预测: 已完成
+echo.
 echo 结果文件位置:
 echo   - 标签文件: label\*.csv
 echo   - 模式文件: patterns\
-echo   - 训练模型: patterns\
-echo   - 强化学习模型: model\balanced_model\
+echo   - 训练模型: model\balanced_model\
 echo   - 预测结果: predictions\
 echo   - 可视化结果: visualization\
 echo.
 echo 完成时间: %date% %time%
 echo ===============================================================================
+
+:: 询问是否要查看预测结果
+echo 是否要查看最新的预测结果？(y/n)
+set /p VIEW_RESULTS=
+echo.
+
+if /i "%VIEW_RESULTS%"=="y" (
+    echo 最新的预测结果:
+    echo ===============================================================================
+    if exist "predictions\predictions_summary.csv" (
+        type "predictions\predictions_summary.csv"
+    ) else (
+        echo 未找到预测结果文件
+    )
+    echo.
+)
+
+:: 询问是否要打开可视化目录
+echo 是否要打开可视化结果目录？(y/n)
+set /p OPEN_VISUALIZATION=
+echo.
+
+if /i "%OPEN_VISUALIZATION%"=="y" (
+    echo 打开可视化结果目录...
+    start "" "visualization"
+)
 
 pause

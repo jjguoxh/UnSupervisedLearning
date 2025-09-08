@@ -44,15 +44,16 @@ def create_sliding_windows_around_signals(df, window_size=20):
     """
     围绕交易信号创建滑动窗口
     专门针对稀疏信号进行优化
+    只使用交易信号（1,2,3,4），排除无操作信号（0）
     """
     windows = []
     signal_indices = []
     
-    # 找到所有非零标签的索引
-    non_zero_labels = df[df['label'] != 0].index.tolist()
+    # 找到所有交易信号标签的索引（排除无操作信号0）
+    trading_labels = df[df['label'].isin([1, 2, 3, 4])].index.tolist()
     
     # 为每个信号创建窗口
-    for idx in non_zero_labels:
+    for idx in trading_labels:
         # 确保窗口不会越界
         start_idx = max(0, idx - window_size // 2)
         end_idx = min(len(df), idx + window_size // 2)

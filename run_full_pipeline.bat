@@ -35,7 +35,7 @@ set /p REGEN_LABELS=
 echo.
 
 if /i "%REGEN_LABELS%"=="y" (
-    echo [1/4] 正在生成交易信号标签...
+    echo [1/5] 正在生成交易信号标签（修改后版本）...
     echo ===============================================================================
     python src\label_generation.py
     if %errorlevel% neq 0 (
@@ -54,7 +54,7 @@ set /p RUN_PATTERN_RECOGNITION=
 echo.
 
 if /i "%RUN_PATTERN_RECOGNITION%"=="y" (
-    echo [2/4] 正在运行模式识别...
+    echo [2/5] 正在运行模式识别...
     echo ===============================================================================
     python src\pattern_recognition.py
     if %errorlevel% neq 0 (
@@ -73,7 +73,7 @@ set /p RUN_PATTERN_TRAINING=
 echo.
 
 if /i "%RUN_PATTERN_TRAINING%"=="y" (
-    echo [3/4] 正在运行模式训练...
+    echo [3/5] 正在运行模式训练...
     echo ===============================================================================
     python src\trading_pattern_learning.py
     if %errorlevel% neq 0 (
@@ -86,13 +86,32 @@ if /i "%RUN_PATTERN_TRAINING%"=="y" (
     timeout /t 2 /nobreak >nul
 )
 
+:: 询问用户是否要训练强化学习模型
+echo 是否要训练强化学习模型？(y/n)
+set /p TRAIN_RL_MODEL=
+echo.
+
+if /i "%TRAIN_RL_MODEL%"=="y" (
+    echo [4/5] 正在训练强化学习模型...
+    echo ===============================================================================
+    python src\simple_rl_trader.py
+    if %errorlevel% neq 0 (
+        echo 错误: 强化学习模型训练失败
+        pause
+        exit /b %errorlevel%
+    )
+    echo ✓ 强化学习模型训练完成
+    echo.
+    timeout /t 2 /nobreak >nul
+)
+
 :: 询问用户是否要运行信号预测
 echo 是否要运行信号预测？(y/n)
 set /p RUN_PATTERN_PREDICTION=
 echo.
 
 if /i "%RUN_PATTERN_PREDICTION%"=="y" (
-    echo [4/4] 正在运行信号预测...
+    echo [5/5] 正在运行信号预测...
     echo ===============================================================================
     python src\pattern_predictor_balanced.py
     if %errorlevel% neq 0 (
@@ -113,12 +132,14 @@ echo 执行摘要:
 echo   - 标签生成: %REGEN_LABELS%
 echo   - 模式识别: %RUN_PATTERN_RECOGNITION%
 echo   - 模式训练: %RUN_PATTERN_TRAINING%
+echo   - 强化学习训练: %TRAIN_RL_MODEL%
 echo   - 信号预测: %RUN_PATTERN_PREDICTION%
 echo.
 echo 结果文件位置:
 if /i "%REGEN_LABELS%"=="y" echo   - 标签文件: label\*.csv
 if /i "%RUN_PATTERN_RECOGNITION%"=="y" echo   - 模式文件: patterns\
 if /i "%RUN_PATTERN_TRAINING%"=="y" echo   - 训练模型: patterns\
+if /i "%TRAIN_RL_MODEL%"=="y" echo   - 强化学习模型: model\balanced_model\
 if /i "%RUN_PATTERN_PREDICTION%"=="y" (
     echo   - 预测结果: predictions\
     echo   - 可视化结果: visualization\

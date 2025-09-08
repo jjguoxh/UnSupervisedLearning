@@ -17,9 +17,9 @@
 ## 修改后的标签系统
 
 - **0**: 无操作状态
-- **1**: 做多开仓（包括开仓点和持仓状态，原标签1和5的合并）
+- **1**: 做多开仓
 - **2**: 做多平仓
-- **3**: 做空开仓（包括开仓点和持仓状态，原标签3和6的合并）
+- **3**: 做空开仓
 - **4**: 做空平仓
 
 ## 修改内容概览
@@ -28,11 +28,12 @@
 - 修改了[label_generation.py](file:///E:/unsupervised_learning/src/label_generation.py)文件中的标签生成逻辑
 - 将原来的标签5（做多持仓）合并到标签1（做多开仓）
 - 将原来的标签6（做空持仓）合并到标签3（做空开仓）
+- 根据最新需求，不再将开仓和平仓之间的点标记为开仓状态，而是保持它们为0（无操作）
 - 更新了相关的注释和可视化函数
 
 ### 2. 文档更新
 - 更新了[README.md](file:///E:/unsupervised_learning/README.md)文件中的标签定义
-- 创建了新的[label_system.md](file:///E:/unsupervised_learning/doc/label_system.md)文档，详细说明了标签系统的变更
+- 更新了[label_system.md](file:///E:/unsupervised_learning/doc/label_system.md)文档，详细说明了标签系统的变更
 - 更新了[prediction_programs_summary.md](file:///E:/unsupervised_learning/doc/prediction_programs_summary.md)文件中的标签定义
 
 ### 3. 相关代码文件更新

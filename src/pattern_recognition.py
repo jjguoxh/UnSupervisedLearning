@@ -68,16 +68,17 @@ def identify_trading_signals(df):
     识别交易信号
     标签定义：
     0: 无操作状态
-    1: 做多开仓（包括开仓点和持仓状态）
+    1: 做多开仓
     2: 做多平仓
-    3: 做空开仓（包括开仓点和持仓状态）
+    3: 做空开仓
     4: 做空平仓
     """
     signals = []
     
     for i in range(len(df)):
         label = df['label'].iloc[i]
-        if label != 0:  # 有交易信号
+        # 只保留交易信号（1,2,3,4），排除无操作信号（0）
+        if label in [1, 2, 3, 4]:  # 有交易信号
             signal = {
                 'index': i,
                 'x': df['x'].iloc[i],

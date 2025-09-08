@@ -536,54 +536,11 @@ def generate_labels_for_file(csv_file_path, output_dir):
         else:
             labels[idx] = action_list[0]
     
-    # 标记持仓状态：在开仓和平仓之间的所有点都标记为开仓状态
-    # 收集所有开仓和平仓的位置
-    long_entries = []   # 做多开仓位置
-    long_exits = []     # 做多平仓位置
-    short_entries = []  # 做空开仓位置
-    short_exits = []    # 做空平仓位置
+    # 根据新需求，不再将开仓和平仓之间的点标记为开仓状态
+    # 而是保持它们为0（无操作），只保留明确的开仓和平仓信号点
     
-    for i in range(len(labels)):
-        if labels[i] == 1:  # 做多开仓
-            long_entries.append(i)
-        elif labels[i] == 2:  # 做多平仓
-            long_exits.append(i)
-        elif labels[i] == 3:  # 做空开仓
-            short_entries.append(i)
-        elif labels[i] == 4:  # 做空平仓
-            short_exits.append(i)
-    
-    # 为做多持仓标记标签1（合并1和5）
-    for i in range(len(long_entries)):
-        entry_idx = long_entries[i]
-        # 找到对应的平仓点
-        exit_idx = None
-        for exit_candidate in long_exits:
-            if exit_candidate > entry_idx:
-                exit_idx = exit_candidate
-                break
-        
-        # 如果找到了平仓点，则标记中间的所有点为做多开仓（原来为做多持仓）
-        if exit_idx is not None:
-            for j in range(entry_idx + 1, exit_idx):
-                if labels[j] == 0:  # 只有在当前是无操作状态时才标记
-                    labels[j] = 1  # 做多开仓（合并了原来的标签5）
-    
-    # 为做空持仓标记标签3（合并3和6）
-    for i in range(len(short_entries)):
-        entry_idx = short_entries[i]
-        # 找到对应的平仓点
-        exit_idx = None
-        for exit_candidate in short_exits:
-            if exit_candidate > entry_idx:
-                exit_idx = exit_candidate
-                break
-        
-        # 如果找到了平仓点，则标记中间的所有点为做空开仓（原来为做空持仓）
-        if exit_idx is not None:
-            for j in range(entry_idx + 1, exit_idx):
-                if labels[j] == 0:  # 只有在当前是无操作状态时才标记
-                    labels[j] = 3  # 做空开仓（合并了原来的标签6）
+    # 删除了将开仓和平仓之间点标记为开仓状态的逻辑
+    # 因为我们只希望保留明确的交易信号点，其余都为无操作
     
     # 创建结果DataFrame
     result_df = df.copy()

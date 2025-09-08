@@ -16,7 +16,14 @@ from sklearn.model_selection import TimeSeriesSplit
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 # 导入强化学习交易器
-from simple_rl_trader import SimpleRLTrader
+try:
+    from .simple_rl_trader import SimpleRLTrader
+except ImportError:
+    try:
+        from simple_rl_trader import SimpleRLTrader
+    except ImportError:
+        SimpleRLTrader = None
+        logging.warning("SimpleRLTrader not found, RL features will be disabled")
 warnings.filterwarnings('ignore')
 
 # 设置中文字体支持
@@ -66,6 +73,9 @@ class BalancedPatternPredictor:
         
         # 加载每个聚类的模式数据
         loaded_clusters = 0
+        loaded_models = 0
+        signal_type_counts = {}  # 记录每种信号类型的聚类数量
+        
         for _, row in cluster_df.iterrows():
             cluster_id = row['cluster_id']
             signal_density = row['signal_density']
@@ -89,21 +99,30 @@ class BalancedPatternPredictor:
                     continue
             
             if patterns:
+                # 解析信号计数
+                signal_counts = eval(str(row['signal_counts'])) if isinstance(row['signal_counts'], str) else row['signal_counts']
+                
+                # 记录每种信号类型的聚类数量
+                for signal_type in signal_counts.keys():
+                    signal_type_counts[signal_type] = signal_type_counts.get(signal_type, 0) + 1
+                
                 self.patterns[cluster_id] = {
                     'patterns': patterns,
                     'signal_density': signal_density,
-                    'signal_counts': eval(str(row['signal_counts'])) if isinstance(row['signal_counts'], str) else row['signal_counts'],
+                    'signal_counts': signal_counts,
                     'long_pairs': row['long_pairs'],
                     'short_pairs': row['short_pairs']
                 }
                 
                 # 为所有聚类创建预测模型（由于数据已平衡，可以为所有聚类创建模型）
                 # 降低信号密度阈值，使用更多的聚类
-                if signal_density >= 0.1:  # 从0.3降低到0.1以增加模型数量
-                    self.cluster_models[cluster_id] = self.create_cluster_model(patterns)
-                    loaded_clusters += 1
+                # 甚至为信号密度为0的聚类也创建模型，以增加信号多样性
+                self.cluster_models[cluster_id] = self.create_cluster_model(patterns)
+                loaded_models += 1
+                loaded_clusters += 1
         
-        logger.info(f"Loaded {loaded_clusters} clusters, {len(self.cluster_models)} predictive models from balanced data")
+        logger.info(f"Loaded {loaded_clusters} clusters, {loaded_models} predictive models from balanced data")
+        logger.info(f"Signal type distribution: {signal_type_counts}")
     
     def create_cluster_model(self, patterns):
         """
@@ -348,12 +367,13 @@ class BalancedPatternPredictor:
         if recent_pattern is None:
             return 0, 0.0  # 无操作或持仓，置信度0
         
-        # 计算与各聚类模式的相似性
-        best_cluster = None
-        best_similarity = -1
-        best_signal = 0
-        best_confidence = 0
+        # 记录预测过程中的详细信息
+        logger.debug(f"Predicting signal at index {current_idx}")
         
+        # 存储所有聚类的预测结果
+        predictions = []
+        
+        # 对每个聚类进行预测
         for cluster_id, model in self.cluster_models.items():
             if model is None:
                 continue
@@ -364,28 +384,88 @@ class BalancedPatternPredictor:
                 model['avg_pattern']
             )
             
-            # 如果相似性更高，更新最佳匹配
-            # 降低相似性阈值以增加匹配机会
-            if similarity > best_similarity and similarity > 0.05:  # 从0.1降低到0.05
-                best_similarity = similarity
-                best_cluster = cluster_id
+            # 获取聚类信息
+            cluster_info = self.patterns[cluster_id]
+            signal_counts = cluster_info['signal_counts']
+            
+            # 预测信号类型（选择最常见的信号）
+            if signal_counts:
+                predicted_signal = max(signal_counts, key=signal_counts.get)
+                # 调整置信度计算方式，增加信号密度的权重
+                confidence = similarity * (1 + 2 * cluster_info['signal_density'])
                 
-                # 根据聚类中最常见的信号类型进行预测
-                cluster_info = self.patterns[cluster_id]
-                signal_counts = cluster_info['signal_counts']
-                
-                # 预测信号类型（选择最常见的信号）
-                if signal_counts:
-                    predicted_signal = max(signal_counts, key=signal_counts.get)
-                    best_signal = predicted_signal
-                    # 调整置信度计算方式，增加信号密度的权重
-                    best_confidence = similarity * (1 + 2 * cluster_info['signal_density'])
+                predictions.append({
+                    'cluster_id': cluster_id,
+                    'similarity': similarity,
+                    'signal': predicted_signal,
+                    'confidence': confidence,
+                    'signal_counts': signal_counts
+                })
         
-        # 添加置信度阈值过滤
-        # 只有当置信度足够高时才返回预测信号，否则返回0（无操作）
-        if best_confidence < 0.1:  # 添加置信度阈值
+        # 如果没有预测结果，返回无操作信号
+        if not predictions:
+            logger.debug("No predictions found, returning no action signal")
             return 0, 0.0
         
+        # 根据置信度加权投票
+        signal_votes = {}
+        signal_confidences = {}  # 存储每个信号的置信度详情
+        
+        for pred in predictions:
+            signal = pred['signal']
+            confidence = pred['confidence']
+            
+            if signal not in signal_votes:
+                signal_votes[signal] = 0
+                signal_confidences[signal] = []
+            signal_votes[signal] += confidence
+            signal_confidences[signal].append(confidence)
+        
+        # 计算每个信号的平均置信度
+        avg_confidences = {}
+        for signal, confidences in signal_confidences.items():
+            avg_confidences[signal] = sum(confidences) / len(confidences) if confidences else 0
+        
+        # 将无操作信号视为中性信号，不参与信号平衡考量
+        # 分别处理交易信号（1,2,3,4）和无操作信号（0）
+        trading_signals = {k: v for k, v in signal_votes.items() if k != 0}
+        no_action_votes = signal_votes.get(0, 0)
+        no_action_confidence = avg_confidences.get(0, 0)
+        
+        # 如果有交易信号，选择得票最高的交易信号
+        if trading_signals:
+            best_trading_signal = max(trading_signals, key=trading_signals.get)
+            best_trading_confidence = avg_confidences.get(best_trading_signal, 0)
+            
+            # 比较交易信号和无操作信号的置信度
+            if best_trading_confidence >= no_action_confidence:
+                best_signal = best_trading_signal
+                best_confidence = best_trading_confidence
+            else:
+                best_signal = 0  # 无操作
+                best_confidence = no_action_confidence
+        else:
+            # 如果没有交易信号，返回无操作信号
+            best_signal = 0
+            best_confidence = no_action_confidence
+        
+        # 记录所有聚类匹配信息和投票结果
+        logger.debug(f"Cluster predictions count: {len(predictions)}")
+        logger.debug(f"Signal votes: {signal_votes}")
+        logger.debug(f"Trading signals: {trading_signals}")
+        logger.debug(f"No action votes: {no_action_votes}")
+        logger.debug(f"Average confidences: {avg_confidences}")
+        logger.debug(f"Best signal: {best_signal}, Confidence: {best_confidence}")
+        
+        # 设置合理的置信度阈值
+        confidence_threshold = 0.05
+        
+        # 只有当置信度足够高时才返回预测信号，否则返回0（无操作）
+        if best_confidence < confidence_threshold:
+            logger.debug(f"Confidence {best_confidence} below threshold {confidence_threshold}, returning no action signal")
+            return 0, 0.0
+        
+        logger.debug(f"Returning signal {best_signal} with confidence {best_confidence}")
         return best_signal, best_confidence
     
     def visualize_predictions(self, df, predictions, output_path=None):
@@ -398,6 +478,7 @@ class BalancedPatternPredictor:
         output_path: str - 输出图像文件路径，默认为None（显示图像而不保存）
         """
         logger.info("Generating visualization of predictions...")
+        logger.info(f"Predictions count: {len(predictions)}")
         
         # 检查是否包含实际标签（用于区分回测和实时预测）
         has_actual_labels = 'actual_signal' in predictions[0] if predictions else False
@@ -407,70 +488,27 @@ class BalancedPatternPredictor:
         predicted_signals = [pred['predicted_signal'] for pred in predictions]
         index_values = [df.iloc[i]['index_value'] for i in indices]
         
+        # 打印预测信号分布，用于调试
+        signal_counts = {}
+        for signal in predicted_signals:
+            signal_counts[signal] = signal_counts.get(signal, 0) + 1
+        logger.info(f"Predicted signal distribution: {signal_counts}")
+        
         # 如果有实际标签，也准备实际标签数据
         actual_signals = [pred['actual_signal'] for pred in predictions] if has_actual_labels else None
         
-        # 合并连续的同向开仓信号
-        # 过滤预测信号，合并连续的同向开仓信号
+        # 只保留交易信号（做多开仓、做多平仓、做空开仓、做空平仓）
         filtered_predictions = []
-        last_long_position = False  # 是否处于做多持仓状态
-        last_short_position = False  # 是否处于做空持仓状态
-        
         for i, (idx, pred_signal) in enumerate(zip(indices, predicted_signals)):
-            actual_signal = actual_signals[i] if actual_signals else None
-            
-            # 处理预测信号的合并逻辑
-            if pred_signal == 1:  # 做多开仓
-                if not last_long_position:  # 如果当前不是做多持仓状态
-                    filtered_predictions.append({
-                        'index': idx,
-                        'predicted_signal': pred_signal,
-                        'actual_signal': actual_signal,
-                        'index_value': index_values[i]
-                    })
-                    last_long_position = True
-                # 如果已经是做多持仓状态，则忽略这个做多开仓信号
-            elif pred_signal == 3:  # 做空开仓
-                if not last_short_position:  # 如果当前不是做空持仓状态
-                    filtered_predictions.append({
-                        'index': idx,
-                        'predicted_signal': pred_signal,
-                        'actual_signal': actual_signal,
-                        'index_value': index_values[i]
-                    })
-                    last_short_position = True
-                # 如果已经是做空持仓状态，则忽略这个做空开仓信号
-            elif pred_signal == 2:  # 做多平仓
+            # 只保留交易信号，过滤掉无操作信号(0)
+            if pred_signal != 0:
+                actual_signal = actual_signals[i] if actual_signals else None
                 filtered_predictions.append({
                     'index': idx,
                     'predicted_signal': pred_signal,
                     'actual_signal': actual_signal,
                     'index_value': index_values[i]
                 })
-                last_long_position = False  # 重置做多持仓状态
-            elif pred_signal == 4:  # 做空平仓
-                filtered_predictions.append({
-                    'index': idx,
-                    'predicted_signal': pred_signal,
-                    'actual_signal': actual_signal,
-                    'index_value': index_values[i]
-                })
-                last_short_position = False  # 重置做空持仓状态
-            else:  # 无操作信号
-                filtered_predictions.append({
-                    'index': idx,
-                    'predicted_signal': pred_signal,
-                    'actual_signal': actual_signal,
-                    'index_value': index_values[i]
-                })
-                # 保持当前持仓状态不变
-        
-        # 打印过滤后的信号分布，用于调试
-        signal_counts = {}
-        for pred in filtered_predictions:
-            signal = pred['predicted_signal']
-            signal_counts[signal] = signal_counts.get(signal, 0) + 1
-        logger.info(f"Filtered signal distribution: {signal_counts}")
         
         # 计算每日收益
         daily_profits = []
@@ -557,14 +595,16 @@ class BalancedPatternPredictor:
             actual_short_close_indices = []
             
             for i, (idx, actual_signal) in enumerate(zip(indices, actual_signals)):
-                if actual_signal == 1:  # 做多开仓
-                    actual_long_open_indices.append((idx, -index_values[i]))  # 上下翻转y值
-                elif actual_signal == 2:  # 做多平仓
-                    actual_long_close_indices.append((idx, -index_values[i]))  # 上下翻转y值
-                elif actual_signal == 3:  # 做空开仓
-                    actual_short_open_indices.append((idx, -index_values[i]))  # 上下翻转y值
-                elif actual_signal == 4:  # 做空平仓
-                    actual_short_close_indices.append((idx, -index_values[i]))  # 上下翻转y值
+                # 只处理交易信号，过滤掉无操作信号(0)
+                if actual_signal != 0:
+                    if actual_signal == 1:  # 做多开仓
+                        actual_long_open_indices.append((idx, -index_values[i]))  # 上下翻转y值
+                    elif actual_signal == 2:  # 做多平仓
+                        actual_long_close_indices.append((idx, -index_values[i]))  # 上下翻转y值
+                    elif actual_signal == 3:  # 做空开仓
+                        actual_short_open_indices.append((idx, -index_values[i]))  # 上下翻转y值
+                    elif actual_signal == 4:  # 做空平仓
+                        actual_short_close_indices.append((idx, -index_values[i]))  # 上下翻转y值
             
             # 在图表上标识实际信号（使用正确的颜色）
             if actual_long_open_indices:
@@ -602,7 +642,7 @@ class BalancedPatternPredictor:
         ax1.legend(loc='upper left')
         
         # 设置标题
-        title = '模式预测结果可视化（合并连续开仓信号）' if has_actual_labels else '实时预测结果可视化（合并连续开仓信号）'
+        title = '模式预测结果可视化' if has_actual_labels else '实时预测结果可视化'
         plt.title(title, fontsize=16)
         
         # 添加网格
@@ -783,6 +823,8 @@ class BalancedPatternPredictor:
         end_idx = len(df) - 1
         
         predictions = []
+        signal_distribution = {}  # 记录信号分布
+        
         for i in range(start_idx, end_idx + 1):
             # 进行预测
             predicted_signal, confidence = self.predict_signal(df, i)
@@ -791,8 +833,12 @@ class BalancedPatternPredictor:
                 'predicted_signal': predicted_signal,
                 'confidence': confidence
             })
+            
+            # 记录信号分布
+            signal_distribution[predicted_signal] = signal_distribution.get(predicted_signal, 0) + 1
         
         logger.info(f"Real-time sequence prediction completed for {len(predictions)} points")
+        logger.info(f"Signal distribution: {signal_distribution}")
         return predictions
 
     def predict_future_signal(self, df, steps_ahead=1):
@@ -854,6 +900,8 @@ class BalancedPatternPredictor:
         if model_path is None:
             model_path = os.path.join(MODEL_DIR, "rl_trader_model.json")
         
+        logger.info(f"Attempting to save RL model to {model_path}")
+        
         try:
             # 将Q表转换为可序列化的格式
             q_table_serializable = {}
@@ -867,13 +915,20 @@ class BalancedPatternPredictor:
                 'epsilon': self.rl_trader.epsilon
             }
             
-            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            # 确保目录存在
+            model_dir = os.path.dirname(model_path)
+            logger.info(f"Ensuring model directory exists: {model_dir}")
+            os.makedirs(model_dir, exist_ok=True)
+            
+            logger.info(f"Writing model data to file: {model_path}")
             with open(model_path, 'w', encoding='utf-8') as f:
                 json.dump(model_data, f, ensure_ascii=False, indent=2)
             logger.info(f"RL model saved to {model_path}")
             return True
         except Exception as e:
             logger.error(f"Error saving RL model: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return False
 
     def load_rl_model(self, model_path=None):
