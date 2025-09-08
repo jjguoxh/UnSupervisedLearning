@@ -633,7 +633,7 @@ def visualize_labels(df, labels, filename):
     plt.tight_layout()
     
     # 显示图表
-    plt.show()
+    # plt.show()
 
 def process_all_files():
     """处理所有CSV文件"""

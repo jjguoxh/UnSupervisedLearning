@@ -473,6 +473,15 @@ def interactive_prediction_mode():
         logger.warning("Failed to load reinforcement learning model, using base predictions only")
         use_rl = False
     
+    # 询问用户是否使用RL模型
+    if use_rl:
+        rl_choice = input("是否使用强化学习模型进行预测? (y/n, 默认为y): ").strip().lower()
+        if rl_choice == 'n':
+            use_rl = False
+            logger.info("用户选择不使用强化学习模型")
+        else:
+            logger.info("用户选择使用强化学习模型")
+    
     while True:
         try:
             print("\n" + "="*60)

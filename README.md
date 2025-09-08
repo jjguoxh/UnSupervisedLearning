@@ -1,137 +1,120 @@
-# UnSupervisedLearning
+# 无监督学习交易信号识别系统
 
 ## 项目概述
 
-本项目是一个基于无监督学习的金融交易信号识别系统。通过聚类分析历史价格模式，识别出具有预测价值的交易信号模式。
+本项目是一个基于无监督学习的交易信号识别系统，能够自动识别金融时间序列数据中的交易信号，包括做多开仓、做多平仓、做空开仓和做空平仓信号。
 
-## 标签系统说明
+## 系统特点
 
-### 标签定义
-- **0**: 无操作状态
-- **1**: 做多开仓
-- **2**: 做多平仓
-- **3**: 做空开仓
-- **4**: 做空平仓
+1. **多模型支持**：提供多种预测模型，包括基于聚类的传统模型、改进的机器学习模型和基于Transformer的深度学习模型
+2. **信号完整性保证**：确保每个交易日至少有一个开仓和一个平仓信号
+3. **数据不平衡处理**：专门处理0标签（无操作信号）过多的问题，只使用交易信号进行训练
+4. **实时预测**：支持实时数据流预测和批量文件预测
 
-### 标签生成规则
-1. 使用动态回撤规则识别趋势段
-2. 在趋势开始点标记开仓信号
-3. 在趋势结束点标记平仓信号
-4. 趋势段之间的所有点标记为0（表示无操作状态）
-5. 根据最新需求，不再将开仓和平仓之间的点标记为开仓状态，而是保持它们为0（无操作）
+## 模型介绍
+
+### 1. 传统聚类模型 (pattern_predictor_balanced.py)
+- 基于K-means聚类和PCA降维
+- 使用无监督学习识别交易模式
+- 适用于快速原型开发和基准测试
+
+### 2. 改进的机器学习模型 (improved_predictor.py)
+- 为每种信号类型训练专门的随机森林模型
+- 丰富的特征工程，包括多种技术指标
+- 更好的预测准确性和多样性
+
+### 3. Transformer深度学习模型 (transformer_predictor.py)
+- 基于Transformer架构的序列预测模型
+- 能够捕捉长期时间依赖关系
+- 通过后处理确保信号完整性
+
+## 快速开始
+
+### 1. 环境准备
+确保已安装以下依赖：
+```bash
+pip install numpy pandas scikit-learn torch matplotlib
+```
+
+### 2. 数据准备
+将CSV格式的时间序列数据放入[data/](file:///e:/unsupervised_learning/data/)目录，文件应包含以下列：
+- x: 特征x
+- a, b, c, d: 其他特征
+- index_value: 指数值
+
+### 3. 生成标签
+```bash
+# 生成交易信号标签
+python src/label_generation.py
+```
+
+### 4. 训练模型
+```bash
+# 训练所有模型
+python train_all_models.py
+
+# 或单独训练特定模型
+python train_transformer_model.py
+
+# 或使用完整的训练工作流
+train_transformer_workflow.bat
+```
+
+### 5. 运行预测
+```bash
+# 运行传统模型预测
+run_prediction.bat
+
+# 运行改进模型预测
+run_improved_prediction.bat
+
+# 运行Transformer模型预测
+run_transformer_prediction.bat
+```
+
+## 使用说明
+
+### 批处理文件
+- [run_quick_pipeline.bat](file:///e:/unsupervised_learning/run_quick_pipeline.bat): 快速运行完整流程
+- [run_prediction.bat](file:///e:/unsupervised_learning/run_prediction.bat): 运行传统模型预测
+- [run_improved_prediction.bat](file:///e:/unsupervised_learning/run_improved_prediction.bat): 运行改进模型预测
+- [run_transformer_prediction.bat](file:///e:/unsupervised_learning/run_transformer_prediction.bat): 运行Transformer模型预测
+- [train_transformer_workflow.bat](file:///e:/unsupervised_learning/train_transformer_workflow.bat): 完整的Transformer模型训练工作流
+
+### 运行模式
+所有预测程序都支持以下三种模式：
+1. **目录监控模式**：监控[realtime_data/](file:///e:/unsupervised_learning/realtime_data/)目录中的新CSV文件并自动预测
+2. **数据模拟模式**：使用历史数据模拟实时数据流进行预测
+3. **交互模式**：手动选择文件进行预测
+
+## 完整的Transformer训练工作流
+
+[train_transformer_workflow.bat](file:///e:/unsupervised_learning/train_transformer_workflow.bat)文件提供了一个完整的训练工作流，包括以下步骤：
+
+1. **生成交易信号标签**：运行[label_generation.py](file:///e:/unsupervised_learning/src/label_generation.py)生成标签文件
+2. **运行模式学习**：运行[advanced_pattern_learning.py](file:///e:/unsupervised_learning/src/advanced_pattern_learning.py)学习交易模式
+3. **训练强化学习模型**：运行[simple_rl_trader.py](file:///e:/unsupervised_learning/src/simple_rl_trader.py)训练强化学习模型
+4. **训练Transformer模型**：运行[train_transformer_model.py](file:///e:/unsupervised_learning/train_transformer_model.py)训练Transformer深度学习模型
+
+该工作流确保所有必要的前置步骤都已完成，然后训练Transformer模型。
 
 ## 项目结构
+```
+unsupervised_learning/
+├── data/                   # 原始数据文件
+├── label/                  # 生成的标签文件
+├── patterns/               # 聚类模式文件
+├── model/                  # 训练好的模型
+│   └── balanced_model/     # 平衡模型目录
+├── predictions/            # 预测结果
+├── visualization/          # 可视化结果
+├── src/                    # 源代码
+└── doc/                    # 文档
+```
 
-- `src/` - 源代码目录
-  - `label_generation.py` - 标签生成脚本
-  - `pattern_recognition.py` - 模式识别脚本
-  - `trading_pattern_learning.py` - 交易模式学习脚本
-  - `pattern_predictor.py` - 原始模式预测脚本
-  - `pattern_predictor_balanced.py` - 平衡模式预测脚本（改进版，集成强化学习优化）
-  - `realtime_predictor.py` - 实时预测脚本
-  - `simple_rl_trader.py` - 简单强化学习交易器
-  - `rl_optimized_realtime_predictor.py` - 强化学习优化的实时预测脚本
-- `data/` - 原始数据目录
-- `label/` - 标签数据目录
-- `patterns/` - 模式数据目录
-- `model/` - 模型保存目录
-- `predictions/` - 预测结果目录
-- `visualization/` - 可视化结果目录
-- `realtime_data/` - 实时数据目录（用于目录监控模式）
+## 改进历史
 
-## 使用方法
+详细改进记录请参见[IMPROVEMENT_SUMMARY.md](file:///e:/unsupervised_learning/IMPROVEMENT_SUMMARY.md)文件。
 
-### 批处理脚本方式（推荐）
-
-项目提供了几个批处理脚本来简化操作流程：
-
-1. **完整流程控制脚本**:
-   ```bash
-   run_full_pipeline.bat
-   ```
-   该脚本允许您选择性地执行各个步骤：
-   - 标签生成
-   - 模式识别
-   - 模式训练
-   - 信号预测（使用平衡模式预测器，集成强化学习优化）
-
-2. **快速流程脚本**:
-   ```bash
-   run_quick_pipeline.bat
-   ```
-   该脚本会自动依次执行所有步骤，无需用户干预，使用平衡模式预测器进行预测。
-
-3. **实时预测脚本**:
-   ```bash
-   run_realtime_prediction.bat
-   ```
-   该脚本启动实时预测程序，支持三种运行模式：
-   - 目录监控模式：监控指定目录中的新数据文件
-   - 数据模拟模式：模拟实时数据流
-   - 交互模式：手动控制预测过程
-
-4. **平衡模式预测脚本**:
-   ```bash
-   run_balanced_prediction.bat
-   ```
-   该脚本专门用于运行改进的平衡模式预测器，对所有标签文件进行预测并生成可视化结果。
-
-5. **强化学习优化实时预测脚本**:
-   ```bash
-   run_rl_optimized_prediction.bat
-   ```
-   该脚本启动强化学习优化的实时预测程序，使用强化学习模型进一步优化预测结果。
-
-### 手动执行方式
-
-1. 准备数据：将CSV格式的价格数据放入`data/`目录
-2. 生成标签：运行`src/label_generation.py`
-3. 模式识别：运行`src/pattern_recognition.py`
-4. 模式训练：运行`src/trading_pattern_learning.py`
-5. 训练强化学习模型：运行`src/simple_rl_trader.py`
-6. 信号预测：
-   - 原始预测器：运行`src/pattern_predictor.py`
-   - 平衡预测器（推荐）：运行`src/pattern_predictor_balanced.py`
-   - 实时预测器：运行`src/realtime_predictor.py`
-   - 强化学习优化预测器：运行`src/rl_optimized_realtime_predictor.py`
-
-### 实时预测模式说明
-
-实时预测器支持三种不同的运行模式：
-
-1. **目录监控模式**：
-   - 程序会持续监控`realtime_data/`目录
-   - 当有新的CSV文件放入该目录时，自动进行预测
-   - 预测结果保存在`predictions/`和`visualization/`目录中
-
-2. **数据模拟模式**：
-   - 使用历史数据模拟实时数据流
-   - 逐点进行预测，模拟真实的实时预测场景
-
-3. **交互模式**：
-   - 提供菜单式交互界面
-   - 用户可以选择不同的操作，包括加载文件预测、启动监控模式等
-
-### 强化学习优化功能
-
-本项目新增了强化学习优化功能，通过以下方式提升预测性能：
-
-1. **训练强化学习模型**：
-   - 运行`src/simple_rl_trader.py`训练强化学习模型
-   - 模型将根据预测信号和实际信号的匹配情况学习最优决策策略
-
-2. **集成强化学习优化**：
-   - 平衡模式预测器(`pattern_predictor_balanced.py`)已集成强化学习优化功能
-   - 强化学习模型会根据预测信号的置信度和其他特征决定是否执行该信号
-
-3. **强化学习优化的实时预测**：
-   - 使用`rl_optimized_realtime_predictor.py`可以获得强化学习优化的实时预测结果
-
-## 注意事项
-
-- 根据最新需求，不再将开仓和平仓之间的点标记为开仓状态，而是保持它们为0（无操作）
-- 在评估预测准确性时，标签1表示做多开仓状态，标签3表示做空开仓状态
-- 平衡模式预测器使用严格平衡后的数据，提供更好的预测性能
-- 可视化结果保存在`visualization/`目录中，每个标签文件都有对应的预测可视化图像
-- 实时预测不需要标签数据，可以直接对原始价格数据进行预测
-- 强化学习模型会自动保存到`model/balanced_model/rl_trader_model.json`，可重复使用
+## 许可证
+本项目仅供学习和研究使用。
