@@ -28,7 +28,7 @@ def choose_time_axis(df: pd.DataFrame) -> np.ndarray:
     """优先使用 ['time','timestamp','datetime','x']，否则用顺序索引。"""
     for col in ["time", "timestamp", "datetime", "x"]:
         if col in df.columns:
-            return np.array(df[col].values)
+            return df[col].values
     return np.arange(len(df))
 
 def detect_data_format(df: pd.DataFrame):
@@ -489,17 +489,17 @@ def generate_labels_for_file(csv_file_path, output_dir):
         # 记录开仓动作
         if i1 not in actions:
             actions[i1] = []
-        if seg["dir"] == 1:  # 上涨趋势（由于y值翻转，实际是下跌趋势，应为做多机会）
+        if seg["dir"] == 1:  # 上涨趋势
             actions[i1].append(1)  # 做多开仓
-        else:  # 下跌趋势（由于y值翻转，实际是上涨趋势，应为做空机会）
+        else:  # 下跌趋势
             actions[i1].append(3)  # 做空开仓
             
         # 记录平仓动作
         if i2 not in actions:
             actions[i2] = []
-        if seg["dir"] == 1:  # 上涨趋势（由于y值翻转，实际是下跌趋势，应为做多机会）
+        if seg["dir"] == 1:  # 上涨趋势
             actions[i2].append(2)  # 做多平仓
-        else:  # 下跌趋势（由于y值翻转，实际是上涨趋势，应为做空机会）
+        else:  # 下跌趋势
             actions[i2].append(4)  # 做空平仓
     
     # 处理同一位置的多个动作
@@ -536,12 +536,6 @@ def generate_labels_for_file(csv_file_path, output_dir):
         else:
             labels[idx] = action_list[0]
     
-    # 根据新需求，不再将开仓和平仓之间的点标记为开仓状态
-    # 而是保持它们为0（无操作），只保留明确的开仓和平仓信号点
-    
-    # 删除了将开仓和平仓之间点标记为开仓状态的逻辑
-    # 因为我们只希望保留明确的交易信号点，其余都为无操作
-    
     # 创建结果DataFrame
     result_df = df.copy()
     result_df["label"] = labels  # 动作标签
@@ -556,9 +550,9 @@ def generate_labels_for_file(csv_file_path, output_dir):
     # 打印详细统计信息
     action_labels = {
         0: "无操作",
-        1: "做多开仓",  # 合并了原来的标签1和5
+        1: "做多开仓",
         2: "做多平仓", 
-        3: "做空开仓",  # 合并了原来的标签3和6
+        3: "做空开仓",
         4: "做空平仓"
     }
     
@@ -568,7 +562,7 @@ def generate_labels_for_file(csv_file_path, output_dir):
     
     # 使用matplotlib显示index_value曲线和标签结果
     visualize_labels(df, labels, filename)
-
+    
 def visualize_labels(df, labels, filename):
     """
     可视化index_value曲线和标签结果
@@ -576,10 +570,8 @@ def visualize_labels(df, labels, filename):
     # 创建图表
     fig, ax = plt.subplots(figsize=(15, 8))
     
-    # 绘制index_value曲线（上下翻转y值）
-    y_values = df['index_value'].values
-    y_flipped = -y_values  # 上下翻转y值
-    ax.plot(range(len(y_flipped)), y_flipped, label='Index Value', color='blue', linewidth=1)
+    # 绘制index_value曲线
+    ax.plot(df['index_value'], label='Index Value', color='blue', linewidth=1)
     
     # 提取各类标签点
     long_entry_points = []   # 做多开仓点 (label=1)
@@ -588,17 +580,17 @@ def visualize_labels(df, labels, filename):
     short_exit_points = []   # 做空平仓点 (label=4)
     
     for i, label in enumerate(labels):
-        if label == 1:  # 做多开仓（包括原来的标签1和5）
-            long_entry_points.append((i, -df['index_value'].iloc[i]))  # 上下翻转y值
+        if label == 1:  # 做多开仓
+            long_entry_points.append((i, df['index_value'].iloc[i]))
         elif label == 2:  # 做多平仓
-            long_exit_points.append((i, -df['index_value'].iloc[i]))   # 上下翻转y值
-        elif label == 3:  # 做空开仓（包括原来的标签3和6）
-            short_entry_points.append((i, -df['index_value'].iloc[i])) # 上下翻转y值
+            long_exit_points.append((i, df['index_value'].iloc[i]))
+        elif label == 3:  # 做空开仓
+            short_entry_points.append((i, df['index_value'].iloc[i]))
         elif label == 4:  # 做空平仓
-            short_exit_points.append((i, -df['index_value'].iloc[i]))  # 上下翻转y值
+            short_exit_points.append((i, df['index_value'].iloc[i]))
     
     # 绘制交易信号箭头
-    # 修正信号颜色：做多用绿色，做空用红色
+    # 根据项目规范进行标记：做多信号使用绿色，做空信号使用红色
     if long_entry_points:
         x, y = zip(*long_entry_points)
         ax.scatter(x, y, color='green', marker='^', s=100, label='Long Entry', zorder=5)
@@ -616,17 +608,18 @@ def visualize_labels(df, labels, filename):
         ax.scatter(x, y, color='red', marker='v', s=100, label='Short Exit', zorder=5)
     
     # 添加图例
+    # 根据项目规范进行标记：做多信号使用绿色，做空信号使用红色
     legend_elements = [
         Patch(facecolor='blue', label='Index Value'),
-        Patch(facecolor='green', label='Long Entry (^) / Exit (v)'),  # 做多信号用绿色
-        Patch(facecolor='red', label='Short Entry (^) / Exit (v)')  # 做空信号用红色
+        Patch(facecolor='green', label='Long Entry (^) / Exit (v)'),
+        Patch(facecolor='red', label='Short Entry (^) / Exit (v)')
     ]
     ax.legend(handles=legend_elements, loc='upper left')
     
     # 设置标题和标签
     ax.set_title(f'Index Value with Trading Signals - {filename}')
     ax.set_xlabel('Time')
-    ax.set_ylabel('Index Value (Flipped)')
+    ax.set_ylabel('Index Value')
     ax.grid(True, alpha=0.3)
     
     # 调整布局

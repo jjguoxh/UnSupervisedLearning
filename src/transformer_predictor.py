@@ -16,12 +16,23 @@ from torch.utils.data import Dataset, DataLoader
 import json
 import logging
 
+# 添加学习率调度器导入
+from torch.optim.lr_scheduler import CosineAnnealingLR
+
 # 设置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # 添加上级目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 添加TA-Lib库用于技术指标计算
+TALIB_AVAILABLE = False
+try:
+    import talib
+    TALIB_AVAILABLE = True
+except ImportError:
+    print("TA-Lib not available. Technical indicators will not be calculated.")
 
 class TransformerPredictor(nn.Module):
     """
@@ -140,6 +151,90 @@ class TradingSignalDataset(Dataset):
         # 标准化特征
         self._normalize_features()
     
+    def _calculate_technical_indicators(self, df):
+        """
+        计算技术指标
+        
+        Args:
+            df: DataFrame，包含原始数据
+            
+        Returns:
+            features: 包含技术指标的特征数组
+        """
+        # 如果TA-Lib不可用，返回原始特征
+        if not TALIB_AVAILABLE:
+            # 返回原始6维特征
+            return df[['x', 'a', 'b', 'c', 'd', 'index_value']].values
+        
+        try:
+            # 计算各种技术指标
+            open_prices = df['index_value'].values
+            high_prices = df['index_value'].values  # 简化处理，实际应用中应使用真实高低价格
+            low_prices = df['index_value'].values
+            close_prices = df['index_value'].values
+            volume = np.ones(len(df))  # 简化处理，实际应用中应使用真实成交量
+            
+            # 初始化技术指标数组
+            sma_5 = close_prices.copy()
+            sma_10 = close_prices.copy()
+            sma_20 = close_prices.copy()
+            macd = close_prices.copy()
+            macd_signal = close_prices.copy()
+            macd_hist = close_prices.copy()
+            rsi = close_prices.copy()
+            upper = close_prices.copy()
+            middle = close_prices.copy()
+            lower = close_prices.copy()
+            slowk = close_prices.copy()
+            slowd = close_prices.copy()
+            
+            # 只有当TA-Lib可用时才计算技术指标
+            if TALIB_AVAILABLE:
+                try:
+                    # 移动平均线
+                    sma_5 = talib.SMA(close_prices, timeperiod=5)
+                    sma_10 = talib.SMA(close_prices, timeperiod=10)
+                    sma_20 = talib.SMA(close_prices, timeperiod=20)
+                    
+                    # MACD
+                    macd, macd_signal, macd_hist = talib.MACD(close_prices)
+                    
+                    # RSI
+                    rsi = talib.RSI(close_prices)
+                    
+                    # 布林带
+                    upper, middle, lower = talib.BBANDS(close_prices)
+                    
+                    # 随机指标
+                    slowk, slowd = talib.STOCH(high_prices, low_prices, close_prices)
+                except Exception as e:
+                    logger.warning(f"Error calculating technical indicators with TA-Lib: {e}")
+            
+            # 原始特征
+            original_features = df[['x', 'a', 'b', 'c', 'd', 'index_value']].values
+            
+            # 合并所有特征（如果计算了技术指标，则特征维度会增加）
+            if TALIB_AVAILABLE:
+                # 合并所有技术指标
+                technical_features = np.column_stack([
+                    sma_5, sma_10, sma_20,
+                    macd, macd_signal, macd_hist,
+                    rsi,
+                    upper, middle, lower,
+                    slowk, slowd
+                ])
+                
+                # 合并原始特征和技术指标
+                all_features = np.concatenate([original_features, technical_features], axis=1)
+            else:
+                # 如果没有计算技术指标，只使用原始特征
+                all_features = original_features
+            
+            return all_features
+        except Exception as e:
+            logger.warning(f"Error calculating technical indicators: {e}. Using original features.")
+            return df[['x', 'a', 'b', 'c', 'd', 'index_value']].values
+    
     def _load_data(self, data_files):
         """加载数据"""
         logger.info(f"Loading data from {len(data_files)} files...")
@@ -151,8 +246,8 @@ class TradingSignalDataset(Dataset):
             try:
                 df = pd.read_csv(file_path)
                 
-                # 提取特征
-                features = df[['x', 'a', 'b', 'c', 'd', 'index_value']].values
+                # 提取特征（包括技术指标）
+                features = self._calculate_technical_indicators(df)
                 labels = df['label'].values
                 
                 # 滑动窗口处理
@@ -228,12 +323,15 @@ class TradingSignalTransformer:
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
         
+        # 添加学习率调度器
+        self.scheduler = None
+        
         # 标准化器
         self.scaler = StandardScaler()
         
         logger.info("TradingSignalTransformer initialized")
     
-    def train(self, train_files, val_files=None, epochs=50, batch_size=32):
+    def train(self, train_files, val_files=None, epochs=50, batch_size=32, use_scheduler=True):
         """
         训练模型
         
@@ -242,6 +340,7 @@ class TradingSignalTransformer:
             val_files: 验证文件列表
             epochs: 训练轮数
             batch_size: 批次大小
+            use_scheduler: 是否使用学习率调度器
         """
         logger.info("Starting training...")
         
@@ -249,9 +348,14 @@ class TradingSignalTransformer:
         train_dataset = TradingSignalDataset(train_files)
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         
+        val_loader = None
         if val_files:
             val_dataset = TradingSignalDataset(val_files)
             val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+        
+        # 初始化学习率调度器
+        if use_scheduler:
+            self.scheduler = CosineAnnealingLR(self.optimizer, T_max=epochs)
         
         # 训练循环
         self.model.train()
@@ -280,11 +384,17 @@ class TradingSignalTransformer:
                 if batch_idx % 10 == 0:
                     logger.info(f"Epoch {epoch+1}/{epochs}, Batch {batch_idx}, Loss: {loss.item():.4f}")
             
+            # 更新学习率
+            if self.scheduler:
+                self.scheduler.step()
+                current_lr = self.optimizer.param_groups[0]['lr']
+                logger.info(f"Epoch {epoch+1}/{epochs}, Current Learning Rate: {current_lr:.6f}")
+            
             avg_loss = total_loss / total_samples
             logger.info(f"Epoch {epoch+1}/{epochs}, Average Loss: {avg_loss:.4f}")
             
             # 验证
-            if val_files:
+            if val_loader:
                 val_loss = self._validate(val_loader)
                 logger.info(f"Epoch {epoch+1}/{epochs}, Validation Loss: {val_loss:.4f}")
         
@@ -355,18 +465,45 @@ class TradingSignalTransformer:
         self.model.train()
         return predictions.tolist(), confidences.tolist()
     
-    def save_model(self, model_path):
+    def save_model(self, model_path, quantize=False):
         """
         保存模型
         
         Args:
             model_path: 模型保存路径
+            quantize: 是否进行模型量化
         """
-        model_data = {
-            'model_state_dict': self.model.state_dict(),
-            'scaler': self.scaler
-        }
+        # 如果需要量化模型
+        if quantize:
+            try:
+                # 创建量化模型副本
+                import torch.quantization
+                quantized_model = torch.quantization.quantize_dynamic(
+                    self.model, {nn.Linear}, dtype=torch.qint8
+                )
+                
+                model_data = {
+                    'model_state_dict': quantized_model.state_dict(),
+                    'scaler': self.scaler,
+                    'quantized': True
+                }
+                logger.info("Model quantized to 8-bit precision")
+            except Exception as e:
+                logger.warning(f"Error quantizing model: {e}. Saving original model.")
+                model_data = {
+                    'model_state_dict': self.model.state_dict(),
+                    'scaler': self.scaler,
+                    'quantized': False
+                }
+        else:
+            model_data = {
+                'model_state_dict': self.model.state_dict(),
+                'scaler': self.scaler,
+                'quantized': False
+            }
         
+        # 保存模型
+        import torch
         torch.save(model_data, model_path)
         logger.info(f"Model saved to {model_path}")
     
