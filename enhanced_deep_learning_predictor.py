@@ -124,7 +124,7 @@ class EnhancedTransformerPredictor(nn.Module):
     """
     增强版Transformer预测器
     """
-    def __init__(self, input_dim: int = 18, d_model: int = 128, nhead: int = 8, 
+    def __init__(self, input_dim: int = 30, d_model: int = 128, nhead: int = 8, 
                  num_layers: int = 6, num_classes: int = 5, dropout: float = 0.1, 
                  max_seq_len: int = 2000):
         super(EnhancedTransformerPredictor, self).__init__()
@@ -243,7 +243,7 @@ class EnhancedDeepLearningPredictor:
     """
     增强版深度学习预测器
     """
-    def __init__(self, input_dim: int = 18):
+    def __init__(self, input_dim: int = 30):
         self.models_dir = "./models_enhanced/"
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.scaler = RobustScaler()  # 使用更鲁棒的标准化器
@@ -688,12 +688,21 @@ class EnhancedDeepLearningPredictor:
         """
         保存所有模型
         """
+        # 不同配置的模型参数
+        configs = [
+            {'d_model': 128, 'nhead': 8, 'num_layers': 6, 'dropout': 0.1},
+            {'d_model': 96, 'nhead': 6, 'num_layers': 8, 'dropout': 0.15},
+            {'d_model': 160, 'nhead': 10, 'num_layers': 4, 'dropout': 0.05}
+        ]
+        
         for i, model in enumerate(self.models):
             model_path = f"{base_path}_model_{i}.pth"
+            config = configs[i % len(configs)]
             torch.save({
                 'model_state_dict': model.state_dict(),
                 'scaler': self.scaler,
-                'input_dim': self.input_dim
+                'input_dim': self.input_dim,
+                'model_config': config
             }, model_path)
         
         logger.info(f"已保存 {len(self.models)} 个模型")
@@ -712,10 +721,19 @@ class EnhancedDeepLearningPredictor:
                 
                 checkpoint = torch.load(model_path, map_location=self.device)
                 
-                # 创建模型
-                model = EnhancedTransformerPredictor(
-                    input_dim=checkpoint['input_dim']
-                ).to(self.device)
+                # 获取模型配置
+                if 'model_config' in checkpoint:
+                    config = checkpoint['model_config']
+                    # 使用保存的配置创建模型
+                    model = EnhancedTransformerPredictor(
+                        input_dim=checkpoint['input_dim'],
+                        **config
+                    ).to(self.device)
+                else:
+                    # 兼容旧版本，使用默认配置
+                    model = EnhancedTransformerPredictor(
+                        input_dim=checkpoint['input_dim']
+                    ).to(self.device)
                 
                 model.load_state_dict(checkpoint['model_state_dict'])
                 self.models.append(model)

@@ -96,7 +96,7 @@ def ensure_trading_signals(predictions: list, df: pd.DataFrame) -> list:
             else:
                 signal = 1  # 默认做多开仓
             
-            predictions[max_conf_idx]['predicted_signal'] = signal
+            predictions[max_conf_idx]['predicted_signal'] = int(signal)
             logger.info(f"添加开仓信号 {signal} 在索引 {max_conf_idx}")
         
         if not has_close:
@@ -110,7 +110,7 @@ def ensure_trading_signals(predictions: list, df: pd.DataFrame) -> list:
             
             # 找一个不同的位置添加平仓信号
             close_idx = (max_conf_idx + len(predictions) // 2) % len(predictions)
-            predictions[close_idx]['predicted_signal'] = close_signal
+            predictions[close_idx]['predicted_signal'] = int(close_signal)
             logger.info(f"添加平仓信号 {close_signal} 在索引 {close_idx}")
     
     return predictions
@@ -120,7 +120,25 @@ def create_visualization(df: pd.DataFrame, predictions: list, output_path: str):
     创建可视化图表
     """
     try:
-        plt.figure(figsize=(15, 10))
+        # 限制数据点数量以避免图像过大
+        max_points = 5000
+        if len(df) > max_points:
+            # 采样数据
+            step = len(df) // max_points
+            df_sampled = df.iloc[::step].copy()
+            df_sampled.reset_index(drop=True, inplace=True)
+            # 调整预测索引
+            predictions_adjusted = []
+            for pred in predictions:
+                new_idx = pred['index'] // step
+                if new_idx < len(df_sampled):
+                    pred_copy = pred.copy()
+                    pred_copy['index'] = new_idx
+                    predictions_adjusted.append(pred_copy)
+            predictions = predictions_adjusted
+            df = df_sampled
+        
+        plt.figure(figsize=(12, 8))
         
         # 主图：价格走势
         plt.subplot(2, 1, 1)
@@ -168,7 +186,7 @@ def create_visualization(df: pd.DataFrame, predictions: list, output_path: str):
         plt.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
         plt.close()
         
         logger.info(f"可视化图表已保存: {output_path}")
@@ -199,8 +217,8 @@ def predict_single_file(predictor: EnhancedDeepLearningPredictor, file_path: str
         prediction_results = []
         for i, (pred, conf) in enumerate(zip(predictions, confidences)):
             prediction_results.append({
-                'index': i,
-                'predicted_signal': pred + 1,  # 转换回1-4
+                'index': int(i),
+                'predicted_signal': int(pred + 1),  # 转换回1-4，确保为Python int类型
                 'confidence': float(conf),
                 'timestamp': datetime.now().isoformat()
             })
@@ -214,11 +232,11 @@ def predict_single_file(predictor: EnhancedDeepLearningPredictor, file_path: str
         result = {
             'file_path': file_path,
             'file_name': os.path.basename(file_path),
-            'data_points': len(df),
+            'data_points': int(len(df)),
             'predictions': prediction_results,
-            'signal_statistics': dict(signal_stats),
-            'total_signals': len(prediction_results),
-            'avg_confidence': np.mean(confidences),
+            'signal_statistics': {int(k): int(v) for k, v in signal_stats.items()},
+            'total_signals': int(len(prediction_results)),
+            'avg_confidence': float(np.mean(confidences)),
             'prediction_time': datetime.now().isoformat()
         }
         
@@ -400,8 +418,8 @@ def main():
     os.makedirs(PREDICTIONS_DIR, exist_ok=True)
     os.makedirs(VISUALIZATION_DIR, exist_ok=True)
     
-    # 创建预测器并加载模型
-    predictor = EnhancedDeepLearningPredictor()
+    # 创建预测器并加载模型（使用正确的输入维度）
+    predictor = EnhancedDeepLearningPredictor(input_dim=30)
     
     model_path = os.path.join(MODELS_DIR, "enhanced_predictor")
     if not predictor.load_models(model_path):
