@@ -1,0 +1,8 @@
+Cluster 3 Information
+========================
+Cluster Size: 5
+Signal Density: 0.4000
+Quality Score: 0.5600
+Signal Counts: {3: 1, 4: 1, 1: 2, 2: 1}
+Long Pairs: 1
+Short Pairs: 1

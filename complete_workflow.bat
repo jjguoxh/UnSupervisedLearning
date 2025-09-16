@@ -234,17 +234,17 @@ set /p PRED_MODE=请选择模式 (1-3):
 
 if "%PRED_MODE%"=="1" (
     echo 启动交互式预测模式...
-    python enhanced_realtime_predictor.py --mode interactive
+    python enhanced_realtime_predictor.py interactive
 ) else if "%PRED_MODE%"=="2" (
     echo 启动目录监控模式...
     echo 请将数据文件放入 realtime_data/ 目录
-    python enhanced_realtime_predictor.py --mode monitor
+    python enhanced_realtime_predictor.py monitor
 ) else if "%PRED_MODE%"=="3" (
     echo 启动数据模拟模式...
-    python enhanced_realtime_predictor.py --mode simulate
+    python enhanced_realtime_predictor.py simulate
 ) else (
     echo 无效选择，启动默认交互式模式...
-    python enhanced_realtime_predictor.py --mode interactive
+    python enhanced_realtime_predictor.py interactive
 )
 
 if %errorlevel% neq 0 (

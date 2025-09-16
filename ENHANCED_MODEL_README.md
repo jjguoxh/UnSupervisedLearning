@@ -108,7 +108,7 @@ run_enhanced_workflow.bat
 python train_enhanced_model.py
 
 # 2. 实时预测
-python enhanced_realtime_predictor.py --mode interactive
+python enhanced_realtime_predictor.py interactive
 ```
 
 #### 方法三：集成到现有系统

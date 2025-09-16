@@ -1,2 +1,2 @@
 cluster_id,cluster_size,signal_counts,long_open,long_close,short_open,short_close,long_pairs,short_pairs,total_pairs,signal_density
-21,1,{1: 1},0,0,1,0,0,0,0,0.0
+21,2,"{1: 1, 4: 1}",0,1,1,0,0,0,0,0.0

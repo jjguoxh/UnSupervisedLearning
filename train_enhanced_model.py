@@ -338,11 +338,11 @@ def create_training_summary(training_history, evaluation_results):
             f.write("\n## 使用方法\n")
             f.write("```bash\n")
             f.write("# 实时预测\n")
-            f.write("python enhanced_realtime_predictor.py --mode interactive\n\n")
+            f.write("python enhanced_realtime_predictor.py interactive\n\n")
             f.write("# 目录监控\n")
-            f.write("python enhanced_realtime_predictor.py --mode monitor\n\n")
+            f.write("python enhanced_realtime_predictor.py monitor\n\n")
             f.write("# 数据模拟\n")
-            f.write("python enhanced_realtime_predictor.py --mode simulate\n")
+            f.write("python enhanced_realtime_predictor.py simulate\n")
             f.write("```\n")
         
         logger.info(f"训练总结已保存: {summary_path}")
@@ -431,7 +431,7 @@ def main():
         logger.info(f"模型文件: {model_path}")
         logger.info(f"结果目录: {TRAINING_RESULTS_DIR}")
         logger.info("\n可以使用以下命令进行预测:")
-        logger.info("python enhanced_realtime_predictor.py --mode interactive")
+        logger.info("python enhanced_realtime_predictor.py interactive")
         
     except Exception as e:
         logger.error(f"训练过程出错: {e}")

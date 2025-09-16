@@ -128,15 +128,15 @@ set /p pred_choice="请选择 (1-4): "
 
 if "%pred_choice%"=="1" (
     echo 启动交互式预测模式...
-    python enhanced_realtime_predictor.py --mode interactive
+    python enhanced_realtime_predictor.py interactive
 ) else if "%pred_choice%"=="2" (
     echo 启动数据模拟模式...
-    python enhanced_realtime_predictor.py --mode simulate
+    python enhanced_realtime_predictor.py simulate
 ) else if "%pred_choice%"=="3" (
     echo 启动目录监控模式...
     echo 请将数据文件放入 realtime_data/ 目录
     echo 按 Ctrl+C 停止监控
-    python enhanced_realtime_predictor.py --mode monitor
+    python enhanced_realtime_predictor.py monitor
 ) else if "%pred_choice%"=="4" (
     echo 跳过预测阶段
 ) else (
@@ -165,7 +165,9 @@ if exist "training_results\enhanced_model_evaluation.png" (
 )
 echo.
 echo 🚀 后续使用：
-echo   - 快速预测: python enhanced_realtime_predictor.py --mode interactive
+echo   - 交互预测: python enhanced_realtime_predictor.py interactive
+echo   - 单文件预测: python enhanced_realtime_predictor.py [文件路径]
+echo   - 目录监控: python enhanced_realtime_predictor.py monitor
 echo   - 重新训练: python train_enhanced_model.py
 echo   - 完整流程: run_enhanced_workflow.bat
 echo.

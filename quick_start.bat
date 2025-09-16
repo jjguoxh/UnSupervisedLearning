@@ -117,9 +117,32 @@ goto :END
 
 :ENHANCED_PREDICTION
 echo.
-echo 🔮 启动增强版实时预测模式...
+echo 🔮 启动增强版预测...
+echo 这将使用训练好的增强版深度学习模型进行预测
 echo.
-python enhanced_realtime_predictor.py --mode interactive
+echo 请选择预测模式:
+echo 1. 交互模式（手动选择文件）
+echo 2. 批量预测（处理predict目录所有文件）
+echo 3. 单文件预测
+echo.
+set /p pred_choice=请选择 (1-3): 
+
+if "%pred_choice%"=="1" (
+    python enhanced_realtime_predictor.py interactive
+) else if "%pred_choice%"=="2" (
+    for %%f in (predict\*.csv) do (
+        echo 正在预测: %%f
+        python enhanced_realtime_predictor.py "%%f"
+    )
+) else if "%pred_choice%"=="3" (
+    set /p single_file=请输入文件路径: 
+    python enhanced_realtime_predictor.py "!single_file!"
+) else (
+    echo 无效选择
+    pause
+    goto :EOF
+)
+
 if %errorlevel% neq 0 (
     echo ❌ 增强版预测失败
     pause
@@ -127,7 +150,11 @@ if %errorlevel% neq 0 (
 )
 echo.
 echo ✅ 增强版预测完成！
-goto :END
+echo 📁 结果已保存到 predictions\ 目录
+echo 📊 可视化图表已保存到 visualization\ 目录
+start explorer visualization
+pause
+goto :EOF
 
 :END
 echo.
